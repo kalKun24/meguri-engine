@@ -92,6 +92,23 @@ godot --headless --path . -s res://demo/expr_parse_demo.gd -- "a + b" "f(1,"
 godot --headless --path . -s res://demo/flow_expression_demo.gd
 ```
 
+### テキスト版の小さな町
+
+`demo/text_town.gd` は、人口・食料・お金の3つのストックを持つ仮モデル（`src/sample/town_model.gd`）を、画面なしで1ターンずつ動かす。仮モデルは GDScript のコードで書いてあり、モデルの定義形式は M2 で決める。
+
+```
+godot --headless --path . -s res://demo/text_town.gd
+```
+
+- 起動すると、ターン0の状態が `0: 人口=100.0, 食料=120.0, お金=100.0` の形で1行表示される。
+- Enter で次のターンに進み、毎ターン同じ形で1行表示される。数値は小数第1位までである。
+- `q` で終わる。`q` 以外の入力も Enter と同じく次のターンに進む。標準入力が終わった（EOF）ときも終わる。
+- 入力を決めて試すときは、入力ファイル（例：Enter 12 回と `q`）を作り、`< ファイル` で渡す。
+
+```
+godot --headless --path . -s res://demo/text_town.gd < input.txt
+```
+
 ## CI
 
 `.github/workflows/test.yml` が、PR と `main` への push のたびに、`scripts/setup.sh` と `scripts/test.sh` を実行する。失敗したテストがあると、ジョブが失敗になる。
