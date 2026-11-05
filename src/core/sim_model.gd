@@ -79,8 +79,8 @@ func add_flow_expr(flow_name: String, source: String, sink: String, expression: 
 		return error
 	var parsed: ExprParseResult = ExprParser.new().parse(expression)
 	if not parsed.ok:
-		return _fail(ERR_PARSE_ERROR, "フロー「%s」の式に構文エラーがある（位置 %d）：%s　式：%s" % [
-			ModelCheck.escape(flow_name), parsed.error.position, ModelCheck.escape(parsed.error.message, 0), ModelCheck.escape(expression, 0)
+		return _fail(ERR_PARSE_ERROR, "フロー「%s」の式に構文エラーがある（位置 %d）：%s 式：%s" % [
+			ModelCheck.escape(flow_name), parsed.error.position, ModelCheck.escape(parsed.error.message, 0, false), ModelCheck.escape(expression, 0)
 		])
 	_names[flow_name] = true
 	_flows.append({"name": flow_name, "source": source, "sink": sink, "amount": 0.0, "expression": expression, "root": parsed.root, "program": null})
@@ -99,8 +99,8 @@ func validate() -> Error:
 		var compiled: ExprCompileResult = ExprCompiler.compile(flow["root"], flow["expression"], _stocks, _constants)
 		if not compiled.ok:
 			flow["program"] = null
-			return _fail(ERR_INVALID_DATA, "フロー「%s」の式に誤りがある（位置 %d）：%s　式：%s" % [
-				ModelCheck.escape(flow["name"]), compiled.error.position, compiled.error.message, ModelCheck.escape(flow["expression"], 0)
+			return _fail(ERR_INVALID_DATA, "フロー「%s」の式に誤りがある（位置 %d）：%s 式：%s" % [
+				ModelCheck.escape(flow["name"]), compiled.error.position, ModelCheck.escape(compiled.error.message, 0, false), ModelCheck.escape(flow["expression"], 0)
 			])
 		flow["program"] = compiled.program
 	_validated = true
@@ -126,8 +126,8 @@ func step() -> Error:
 		if program != null:
 			var evaluated: ExprEvalResult = ExprEvaluator.evaluate(program, _stocks)
 			if not evaluated.ok:
-				return _fail(FAILED, "ターン %d の実行時エラー：フロー「%s」の式の位置 %d で、%s　式：%s" % [
-					turn, ModelCheck.escape(flow["name"]), evaluated.position, evaluated.message, ModelCheck.escape(flow["expression"], 0)
+				return _fail(FAILED, "ターン %d の実行時エラー：フロー「%s」の式の位置 %d で、%s 式：%s" % [
+					turn, ModelCheck.escape(flow["name"]), evaluated.position, ModelCheck.escape(evaluated.message, 0, false), ModelCheck.escape(flow["expression"], 0)
 				])
 			amount = evaluated.value
 		if flow["source"] != "":
