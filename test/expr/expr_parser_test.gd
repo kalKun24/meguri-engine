@@ -318,3 +318,38 @@ func test_classes_are_ref_counted_not_nodes() -> void:
 	for obj in [ExprParser.new(), ExprLexer.new(""), ExprNode.new(), ExprToken.new(), ExprSyntaxError.new(), ExprParseResult.new()]:
 		assert_bool(obj is RefCounted).is_true()
 		assert_bool(obj is Node).is_false()
+
+
+# --- 見えない文字のエスケープ（T2-1） ---
+
+func test_format_escapes_invisible_characters_and_aligns_caret() -> void:
+	# "1<TAB>$"：タブの後の $ で止まる。タブは \\u{0009}（8文字）になるので、^ は 2 + 1 + 8 の位置に来る。
+	var error := _error("1" + char(0x09) + "$")
+	assert_int(error.position).is_equal(2)
+	var lines := error.format().split("\n")
+	assert_str(lines[1]).is_equal("  1\\u{0009}$")
+	assert_str(lines[2]).is_equal(" ".repeat(2 + 1 + 8) + "^")
+
+
+func test_format_escapes_right_to_left_override_in_source() -> void:
+	var error := _error("a" + char(0x202E) + "b")
+	var text := error.format()
+	for line in text.split("\n"):
+		assert_str(HostileValues.find_raw_invisible(line)).is_empty()
+	assert_str(text).contains("\\u{202E}")
+	assert_str(text.split("\n")[2]).is_equal("   ^")
+
+
+func test_format_caret_after_backslash_in_source() -> void:
+	# バックスラッシュは二重になる。^ はその分ずれる。
+	var error := _error("1\\")
+	var lines := error.format().split("\n")
+	assert_str(lines[1]).is_equal("  1\\\\")
+	assert_str(lines[2]).is_equal(" ".repeat(2 + 1) + "^")
+
+
+func test_format_escapes_message() -> void:
+	var error := ExprSyntaxError.new("x", 0, "原因" + char(0x200B))
+	assert_str(error.format()).contains("原因\\u{200B}")
+	for line in error.format().split("\n"):
+		assert_str(HostileValues.find_raw_invisible(line)).is_empty()

@@ -92,6 +92,16 @@ godot --headless --path . -s res://demo/expr_parse_demo.gd -- "a + b" "f(1,"
 godot --headless --path . -s res://demo/flow_expression_demo.gd
 ```
 
+### 見えない文字のエスケープ
+
+`demo/escape_demo.gd` は、U+202E（右から左）、U+200B（ゼロ幅）、U+00AD（ソフトハイフン）、異体字選択子、タグ文字を含むストック名や式を、`SimModel` と式のパーサに渡す。どのエラー文でも、それらが `\u{XXXX}` の形で見える。構文エラーの `^` は、エスケープ後の式の文字の下に来る。
+
+```
+godot --headless --path . -s res://demo/escape_demo.gd
+```
+
+エスケープの対象は、`ModelCheck.ESCAPE_RANGES`（コードポイントの範囲表）で決める。表は `scripts/gen_invisible_ranges.py` で生成する（Unicode 16.0.0）。
+
 ### テキスト版の小さな町
 
 `demo/text_town.gd` は、人口・食料・お金の3つのストックを持つ仮モデル（`src/sample/town_model.gd`）を、画面なしで1ターンずつ動かす。仮モデルは GDScript のコードで書いてあり、モデルの定義形式は M2 で決める。
