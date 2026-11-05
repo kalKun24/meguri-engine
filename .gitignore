@@ -1,0 +1,8 @@
+# Godot が作る一時ファイル
+.godot/
+
+# scripts/setup.sh が導入する gdUnit4（版は setup.sh で固定している）
+addons/gdUnit4/
+
+# gdUnit4 のテスト結果
+reports/
