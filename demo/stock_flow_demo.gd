@@ -20,8 +20,12 @@ func _run(title: String, reverse: bool) -> void:
 	else:
 		model.add_flow("a_to_b", "A", "B", 3.0)
 		model.add_flow("b_to_c", "B", "C", 2.0)
-	model.turn_finished.connect(func(turn: int) -> void:
-		print("  turn_finished(%d): A=%s B=%s C=%s" % [turn, model.get_stock("A"), model.get_stock("B"), model.get_stock("C")]))
+	# ラムダが model をキャプチャすると参照循環になり、終了時に解放されない。メソッドに bind して接続する。
+	model.turn_finished.connect(_on_turn_finished.bind(model))
 	print(title)
 	for i in 3:
 		model.step()
+
+
+func _on_turn_finished(turn: int, model: SimModel) -> void:
+	print("  turn_finished(%d): A=%s B=%s C=%s" % [turn, model.get_stock("A"), model.get_stock("B"), model.get_stock("C")])
