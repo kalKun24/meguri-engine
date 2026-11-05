@@ -48,6 +48,14 @@ gdUnit4 公式の GitHub Action（`gdUnit4-action`）は使わない。gdUnit4 v
 
 - テストは gdUnit4 で書き、`test/` に置く。
 
+## デモ
+
+`demo/stock_flow_demo.gd` は、A→B→C の2本のフローを持つ `SimModel` を3ターン進め、各ターンのストックと `turn_finished` のターン番号を表示する。フローの定義順を入れ替えたモデルでも同じ値になる。
+
+```
+godot --headless --path . -s res://demo/stock_flow_demo.gd
+```
+
 ## CI
 
 `.github/workflows/test.yml` が、PR と `main` への push のたびに、`scripts/setup.sh` と `scripts/test.sh` を実行する。失敗したテストがあると、ジョブが失敗になる。
