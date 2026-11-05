@@ -60,6 +60,14 @@ gdUnit4 公式の GitHub Action（`gdUnit4-action`）は使わない。gdUnit4 v
 godot --headless --path . -s res://demo/stock_flow_demo.gd
 ```
 
+### 壊れた値の検査
+
+`demo/model_validation_demo.gd` は、NaN の初期値、無限大の量、空の名前、制御文字を含む名前、未定義の名前の取得を `SimModel` に渡す。どれも `Error` と、制御文字を `\u{XXXX}` にエスケープした理由が表示される。最後に正しい定義を1つ行い、`last_error` が空に戻ることを見る。
+
+```
+godot --headless --path . -s res://demo/model_validation_demo.gd
+```
+
 ### 式のパーサ
 
 `demo/expr_parse_demo.gd` で、`src/expr/` の式のパーサ（自前の字句解析と構文解析。評価はしない）を試せる。正しい式は構文木（S 式）、誤った式は原因と文字位置つきのエラーが表示される。
@@ -70,6 +78,36 @@ godot --headless --path . -s res://demo/expr_parse_demo.gd -- "a + b" "f(1,"
 ```
 
 2行目のように `--` の後ろに式を並べると、その式を調べる。
+
+### 式で書くフローの量
+
+`demo/flow_expression_demo.gd` は、フローの量を式で書いた `SimModel`（`add_flow_expr`）を試す。次の4点を表示する。
+
+1. 人口が増えると食料が減るモデルを3ターン進め、式どおりに値が変わる。
+2. `1/2` が 0.5 になる（すべて float で評価する）。
+3. 許可されていない関数、未定義の名前、`OS.get_name()`、`()` なしの `min`、`Vector2(1, 2)`、引数の数の誤り、400 桁の数が、式の全文と文字位置つきのエラーになる。
+4. 0 除算がターン番号つきの実行時エラーになり、そのターンではストックの値もターン番号も変わらない。
+
+```
+godot --headless --path . -s res://demo/flow_expression_demo.gd
+```
+
+### テキスト版の小さな町
+
+`demo/text_town.gd` は、人口・食料・お金の3つのストックを持つ仮モデル（`src/sample/town_model.gd`）を、画面なしで1ターンずつ動かす。仮モデルは GDScript のコードで書いてあり、モデルの定義形式は M2 で決める。
+
+```
+godot --headless --path . -s res://demo/text_town.gd
+```
+
+- 起動すると、ターン0の状態が `0: 人口=100.0, 食料=120.0, お金=100.0` の形で1行表示される。
+- Enter で次のターンに進み、毎ターン同じ形で1行表示される。数値は小数第1位までである。
+- `q` で終わる。`q` 以外の入力も Enter と同じく次のターンに進む。標準入力が終わった（EOF）ときも終わる。
+- 入力を決めて試すときは、入力ファイル（例：Enter 12 回と `q`）を作り、`< ファイル` で渡す。
+
+```
+godot --headless --path . -s res://demo/text_town.gd < input.txt
+```
 
 ## CI
 

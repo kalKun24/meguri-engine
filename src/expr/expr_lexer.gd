@@ -99,8 +99,13 @@ func _read_number() -> ExprToken:
 		while _pos < _source.length() and _is_digit(_source[_pos]):
 			_pos += 1
 	var text: String = _source.substr(start, _pos - start)
+	var value: float = text.to_float()
+	if is_inf(value) or is_nan(value):
+		# 400 桁の数のように、float に収まらないリテラルは拒否する（T1-1）。位置は数の先頭にする。
+		_pos = start
+		return _error("数値リテラルが大きすぎて、有限の数にならない（%d 桁）" % text.length())
 	var token := ExprToken.new(ExprToken.Type.NUMBER, text, start)
-	token.number = text.to_float()
+	token.number = value
 	return token
 
 
