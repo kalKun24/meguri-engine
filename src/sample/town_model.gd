@@ -19,6 +19,21 @@ const LABELS: Dictionary = {
 	"money": "お金",
 }
 
+## アクション名から、表示に使う名前への対応。定義順（メニューの番号の順）に並べる。
+const ACTION_LABELS: Dictionary = {
+	"expand_farmland": "畑を広げる",
+	"raise_tax": "税率を上げる",
+	"lower_tax": "税率を下げる",
+}
+
+## アクションで変わる値の名前から、表示名への対応。アクションの実行の前後の値を表示するのに使う。
+const PARAM_LABELS: Dictionary = {
+	"farmland": "畑",
+	"tax_rate": "税率",
+	"money": "お金",
+	"farmland_cost": "畑の値段",
+}
+
 ## 既定のパラメータ。初期値と定数の両方を含む。理由は報告に書いた。
 const DEFAULT_PARAMS: Dictionary = {
 	# 初期値
@@ -35,6 +50,13 @@ const DEFAULT_PARAMS: Dictionary = {
 	"tax_rate": 0.3,  # 1 人あたりの税収。
 	"upkeep": 0.2,  # 1 人あたりの町の維持費。
 	"relief_cost": 0.4,  # 食料の不足 1 あたりの救援費。
+	# アクションの数値（暫定）
+	"farmland_cost": 50.0,  # 畑を広げる費用。広げるたびに farmland_growth 倍になる（逓増）。初期のお金 100 では 1 回しか買えない。
+	"farmland_growth": 1.2,  # 畑を広げるたびの費用の増え方。同じ手を繰り返すほど高くなり、税率や待つ手との選び分けが生まれる。
+	"farmland_step": 20.0,  # 1 回で増える畑。初期の farmland 100 の 2 割で、人口が 100 を超えると生産の増えが見える。
+	"tax_step": 0.1,  # 税率を 1 回で上げ下げする幅。初期の 0.3 から、3 回で 0 か 0.6 になる。
+	"tax_min": 0.0,  # 税率の下限。
+	"tax_max": 1.0,  # 税率の上限。
 }
 
 ## 直近の build() の失敗の説明。成功したら空である。
@@ -74,9 +96,26 @@ func build(overrides: Dictionary = {}) -> SimModel:
 	for flow: Array in flows:
 		if not _check(model.add_flow_expr(flow[0], flow[1], flow[2], flow[3]), model):
 			return null
+	if not _add_actions(model):
+		return null
 	if not _check(model.validate(), model):
 		return null
 	return model
+
+
+# アクションは、使うストックと定数を定義した後に定義する。式の範囲の守りは clamp で行う。
+# 実行条件は、効果が無意味になる場合（上限・下限・お金不足）を断り、理由を表示できるようにする。
+# clamp は式の範囲の守り、条件は「何も変わらないのに成功扱い」を防ぐ。
+func _add_actions(model: SimModel) -> bool:
+	var actions: Array[Array] = [
+		["expand_farmland", "money >= farmland_cost", ["money = money - farmland_cost", "farmland = farmland + farmland_step", "farmland_cost = farmland_cost * farmland_growth"]],
+		["raise_tax", "tax_rate < tax_max", ["tax_rate = clamp(tax_rate + tax_step, tax_min, tax_max)"]],
+		["lower_tax", "tax_rate > tax_min", ["tax_rate = clamp(tax_rate - tax_step, tax_min, tax_max)"]],
+	]
+	for action: Array in actions:
+		if not _check(model.add_action(action[0], action[1], action[2]), model):
+			return false
+	return true
 
 
 func _check(code: Error, model: SimModel) -> bool:

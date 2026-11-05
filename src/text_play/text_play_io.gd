@@ -3,8 +3,11 @@
 class_name TextPlayIO
 extends RefCounted
 
+## 人が打つ1行の長さの上限（文字数）。超えた分は切り詰める。
+const MAX_LINE_LENGTH: int = 200
 
-## 1行読んで返す。末尾の改行は含まない。入力が終わっていれば空文字を返し、is_eof() が true になる。
+
+## 1行読んで返す。末尾の改行は含まない。長い行は、実装が上限（MAX_LINE_LENGTH 文字ほど）で切り詰めてよい。入力が終わっていれば空文字を返し、is_eof() が true になる。
 func read_line() -> String:
 	return ""
 
