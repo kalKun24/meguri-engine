@@ -50,11 +50,26 @@ gdUnit4 公式の GitHub Action（`gdUnit4-action`）は使わない。gdUnit4 v
 
 ## デモ
 
+どちらも画面なしで動く。
+
+### ストックとフロー
+
 `demo/stock_flow_demo.gd` は、A→B→C の2本のフローを持つ `SimModel` を3ターン進め、各ターンのストックと `turn_finished` のターン番号を表示する。フローの定義順を入れ替えたモデルでも同じ値になる。
 
 ```
 godot --headless --path . -s res://demo/stock_flow_demo.gd
 ```
+
+### 式のパーサ
+
+`demo/expr_parse_demo.gd` で、`src/expr/` の式のパーサ（自前の字句解析と構文解析。評価はしない）を試せる。正しい式は構文木（S 式）、誤った式は原因と文字位置つきのエラーが表示される。
+
+```
+godot --headless --path . -s res://demo/expr_parse_demo.gd
+godot --headless --path . -s res://demo/expr_parse_demo.gd -- "a + b" "f(1,"
+```
+
+2行目のように `--` の後ろに式を並べると、その式を調べる。
 
 ## CI
 
