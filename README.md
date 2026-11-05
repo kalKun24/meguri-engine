@@ -60,6 +60,14 @@ gdUnit4 公式の GitHub Action（`gdUnit4-action`）は使わない。gdUnit4 v
 godot --headless --path . -s res://demo/stock_flow_demo.gd
 ```
 
+### 壊れた値の検査
+
+`demo/model_validation_demo.gd` は、NaN の初期値、無限大の量、空の名前、制御文字を含む名前、未定義の名前の取得を `SimModel` に渡す。どれも `Error` と、制御文字を `\u{XXXX}` にエスケープした理由が表示される。最後に正しい定義を1つ行い、`last_error` が空に戻ることを見る。
+
+```
+godot --headless --path . -s res://demo/model_validation_demo.gd
+```
+
 ### 式のパーサ
 
 `demo/expr_parse_demo.gd` で、`src/expr/` の式のパーサ（自前の字句解析と構文解析。評価はしない）を試せる。正しい式は構文木（S 式）、誤った式は原因と文字位置つきのエラーが表示される。
