@@ -92,6 +92,19 @@ godot --headless --path . -s res://demo/expr_parse_demo.gd -- "a + b" "f(1,"
 godot --headless --path . -s res://demo/flow_expression_demo.gd
 ```
 
+### プレイヤーのアクション
+
+`demo/action_demo.gd` は、お金を払って farmland を増やすアクション（`add_action`・`apply_action`）を試す。次の4点を表示する。
+
+1. お金が足りるとき、実行できて、次のターンの生産が増える。`action_applied` のシグナルを受け取った表示も出る。
+2. 1ターンに何回でも実行でき、費用は毎回かかる。
+3. お金が足りないとき、理由つきのエラーになり、お金も farmland も変わらない。
+4. 未定義のアクションは、エラーになる。
+
+```
+godot --headless --path . -s res://demo/action_demo.gd
+```
+
 ### 見えない文字のエスケープ
 
 `demo/escape_demo.gd` は、U+202E（右から左）、U+200B（ゼロ幅）、U+00AD（ソフトハイフン）、異体字選択子、タグ文字を含むストック名や式を、`SimModel` と式のパーサに渡す。どのエラー文でも、それらが `\u{XXXX}` の形で見える。構文エラーの `^` は、エスケープ後の式の文字の下に来る。

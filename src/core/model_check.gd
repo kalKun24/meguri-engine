@@ -6,8 +6,10 @@ extends RefCounted
 
 ## 名前の最大長（文字数）。これを超える名前は拒否する。
 const MAX_NAME_LENGTH: int = 64
-## 定義（ストック・定数・フローの合計）の最大個数。これを超える定義は拒否する。
+## 定義（ストック・定数・フロー・アクションの合計）の最大個数。これを超える定義は拒否する。
 const MAX_DEFINITIONS: int = 1000
+## 1つのアクションが持てる効果の最大個数。これを超える定義は拒否する。
+const MAX_ACTION_EFFECTS: int = 50
 ## エラー文に名前を出すときの最大長（文字数）。超えた分は「...」で省く。
 const MAX_MESSAGE_NAME_LENGTH: int = 32
 
