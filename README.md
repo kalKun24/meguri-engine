@@ -79,6 +79,19 @@ godot --headless --path . -s res://demo/expr_parse_demo.gd -- "a + b" "f(1,"
 
 2行目のように `--` の後ろに式を並べると、その式を調べる。
 
+### 式で書くフローの量
+
+`demo/flow_expression_demo.gd` は、フローの量を式で書いた `SimModel`（`add_flow_expr`）を試す。次の4点を表示する。
+
+1. 人口が増えると食料が減るモデルを3ターン進め、式どおりに値が変わる。
+2. `1/2` が 0.5 になる（すべて float で評価する）。
+3. 許可されていない関数、未定義の名前、`OS.get_name()`、`()` なしの `min`、`Vector2(1, 2)`、引数の数の誤り、400 桁の数が、式の全文と文字位置つきのエラーになる。
+4. 0 除算がターン番号つきの実行時エラーになり、そのターンではストックの値もターン番号も変わらない。
+
+```
+godot --headless --path . -s res://demo/flow_expression_demo.gd
+```
+
 ## CI
 
 `.github/workflows/test.yml` が、PR と `main` への push のたびに、`scripts/setup.sh` と `scripts/test.sh` を実行する。失敗したテストがあると、ジョブが失敗になる。

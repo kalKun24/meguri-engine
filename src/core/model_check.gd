@@ -34,12 +34,12 @@ static func check_finite(value: float, what: String = "値") -> String:
 
 ## 利用者の入力をエラー文やログに出すためのエスケープ。
 ## 制御文字・bidi 制御・ゼロ幅文字・行区切りなどを \u{XXXX} の形にし、バックスラッシュは二重にする。
-## MAX_MESSAGE_NAME_LENGTH を超える分は「...」で省く。
-static func escape(text: String) -> String:
+## limit 文字を超える分は「...」で省く。既定は MAX_MESSAGE_NAME_LENGTH である。0 以下を渡すと省かず、全文を出す（式の全文など）。
+static func escape(text: String, limit: int = MAX_MESSAGE_NAME_LENGTH) -> String:
 	var result := ""
 	var count := 0
 	for i in text.length():
-		if count >= MAX_MESSAGE_NAME_LENGTH:
+		if limit > 0 and count >= limit:
 			result += "..."
 			break
 		var code: int = text.unicode_at(i)
