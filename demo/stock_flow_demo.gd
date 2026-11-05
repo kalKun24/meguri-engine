@@ -28,4 +28,4 @@ func _run(title: String, reverse: bool) -> void:
 
 
 func _on_turn_finished(turn: int, model: SimModel) -> void:
-	print("  turn_finished(%d): A=%s B=%s C=%s" % [turn, model.get_stock("A"), model.get_stock("B"), model.get_stock("C")])
+	print("  turn_finished(%d): A=%s B=%s C=%s" % [turn, model.get_stock("A").value, model.get_stock("B").value, model.get_stock("C").value])
