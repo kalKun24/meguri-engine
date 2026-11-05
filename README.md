@@ -48,6 +48,17 @@ gdUnit4 公式の GitHub Action（`gdUnit4-action`）は使わない。gdUnit4 v
 
 - テストは gdUnit4 で書き、`test/` に置く。
 
+## 式のパーサのデモ
+
+`src/expr/` の式のパーサ（自前の字句解析と構文解析。評価はしない）を、画面なしで試せる。正しい式は構文木（S 式）、誤った式は原因と文字位置つきのエラーが表示される。
+
+```
+godot --headless --path . -s scripts/demo_expr_parse.gd
+godot --headless --path . -s scripts/demo_expr_parse.gd -- "a + b" "f(1,"
+```
+
+2行目のように `--` の後ろに式を並べると、その式を調べる。
+
 ## CI
 
 `.github/workflows/test.yml` が、PR と `main` への push のたびに、`scripts/setup.sh` と `scripts/test.sh` を実行する。失敗したテストがあると、ジョブが失敗になる。
