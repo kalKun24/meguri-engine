@@ -3,10 +3,17 @@ class_name SimModelActionTest
 extends GdUnitTestSuite
 
 var _applied: Array[String] = []
+var _seen_farmland: Array[float] = []
+# シグナルの受け取りで状態を読むための参照。循環を避けるため、テストの最後に null に戻す。
+var _model: SimModel = null
 
 
 func _on_action_applied(action_name: String) -> void:
 	_applied.append(action_name)
+
+
+func _on_action_applied_read_state(_action_name: String) -> void:
+	_seen_farmland.append(_model.get_stock("farmland").value)
 
 
 # money 100、farmland 1、1 ターンに farmland * 10 のお金が入る。
@@ -70,6 +77,22 @@ func test_non_finite_effect_fails_and_rolls_back() -> void:
 	assert_int(model.apply_action("bad")).is_equal(FAILED)
 	assert_str(model.last_error).is_not_empty()
 	assert_str(_state(model)).is_equal(before)
+
+
+# 定数への効果を失敗する効果の前に置いても、定数は元の値のままで、step() は元の定数で計算する。
+func test_constant_effect_before_failing_effect_rolls_back() -> void:
+	var model := SimModel.new()
+	model.add_stock("farmland", 1.0)
+	model.add_stock("zero", 0.0)
+	model.add_stock("out", 0.0)
+	model.add_constant("price", 5.0)
+	model.add_flow_expr("f", "", "out", "price")
+	assert_int(model.add_action("bad", "1", ["price = 1", "farmland = 1 / zero"])).is_equal(OK)
+	assert_int(model.apply_action("bad")).is_equal(FAILED)
+	assert_float(model.get_constant("price").value).is_equal(5.0)
+	assert_float(model.get_stock("farmland").value).is_equal(1.0)
+	assert_int(model.step()).is_equal(OK)
+	assert_float(model.get_stock("out").value).is_equal(5.0)
 
 
 func test_overflow_effect_fails_and_rolls_back() -> void:
@@ -181,10 +204,13 @@ func test_action_applied_signal() -> void:
 func test_signal_sees_the_applied_state() -> void:
 	var model := _new_model()
 	_add_buy(model)
-	var seen: Array[float] = []
-	model.action_applied.connect(func(_n: String) -> void: seen.append(model.get_stock("farmland").value))
+	_seen_farmland.clear()
+	_model = model
+	model.action_applied.connect(_on_action_applied_read_state)
 	model.apply_action("buy_farmland")
-	assert_array(seen).is_equal([2.0])
+	model.action_applied.disconnect(_on_action_applied_read_state)
+	_model = null
+	assert_array(_seen_farmland).is_equal([2.0])
 
 
 # 1 ターンに何回でも実行でき、費用は毎回かかる。
