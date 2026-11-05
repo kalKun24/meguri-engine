@@ -38,9 +38,11 @@ func test_q_ends_without_advancing() -> void:
 	assert_int(io.outputs.filter(func(l: String) -> bool: return l.contains("人口=")).size()).is_equal(1)
 
 
-func test_any_other_input_advances_like_enter() -> void:
+# Enter（空行・空白だけ）だけがターンを進める。分からない入力は、進めずに理由を表示する。
+func test_only_blank_input_advances_and_unknown_input_does_not() -> void:
 	var io := _play(["", "abc", "Q", " ", "quit", "q"] as Array[String])
-	assert_int(io.outputs.filter(func(l: String) -> bool: return l.contains("人口=")).size()).is_equal(6)
+	assert_int(io.outputs.filter(func(l: String) -> bool: return l.begins_with("1: ") or l.begins_with("2: ")).size()).is_equal(2)
+	assert_int(io.outputs.filter(func(l: String) -> bool: return l.begins_with("分からない入力")).size()).is_equal(3)
 
 
 func test_eof_ends() -> void:
