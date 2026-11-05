@@ -1,0 +1,26 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # 版は固定する。変えるときは README.md の「固定している版」と scripts/setup.sh も直す。
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      # 手元と同じ scripts/setup.sh で、Godot と gdUnit4 を導入する。
+      - name: Godot と gdUnit4 を導入する
+        run: scripts/setup.sh
+      # 手元と同じ scripts/test.sh で、godot --headless のテストを回す。
+      - name: テストを実行する
+        run: |
+          export GODOT_BIN="${HOME}/.local/bin/godot"
+          scripts/test.sh
