@@ -194,7 +194,7 @@ godot --headless --no-header --path . -s res://src/auto_run/auto_run_main.gd -- 
 
 | コード | 意味 | CSV |
 |---|---|---|
-| 0 | 成功 | 出す |
+| 0 | 成功（勝利・敗北で N の前にゲームが終わったときも含む。そこまでの CSV を出す） | 出す |
 | 1 | 実行時エラー（0 除算、ストックが NaN・無限大になる、など）で途中で止まった | そのターンまでを出す |
 | 2 | 引数・モデルの誤り、上限の超過 | 出さない |
 | 3 | 出力先に書けない | 書けなかった |
@@ -209,7 +209,42 @@ godot --headless --no-header --path . -s res://src/auto_run/auto_run_main.gd -- 
 - 名前は、カンマ・引用符を含むとき RFC 4180 に従って `"` で囲み、中の `"` を二重にする。先頭（空白を除く）が `=` `+` `-` `@` のときは、表計算ソフトが式として扱わないよう、先頭に `'` を足す。不可視文字・制御文字・改行は `\u{XXXX}` にエスケープし、バックスラッシュは二重にする（`CsvFormat.escape_field()`）。値の列には `'` を足さない。
 - GDScript の文字列には NUL を入れられない（Godot が U+FFFD に置き換える）。不正な UTF-8 の引数も同じで、置き換えられた後の文字列として検査される。
 
-コードから使うときは、`AutoRunner.new().run(model, turns, seed)` が `AutoRunResult`（`rows`・`stock_names`・`error`・`message`・`seed`・`to_csv()`）を返す。ターンは `SimModel.advance_turn()` で進める。
+コードから使うときは、`AutoRunner.new().run(model, turns, seed)` が `AutoRunResult`（`rows`・`stock_names`・`error`・`message`・`seed`・`game_result`・`to_csv()`）を返す。ターンは `SimModel.advance_turn()` で進める。
+
+モデルに勝利・敗北の条件があり、N に達する前にゲームが終わったときは、そこで止まる。CSV の最終行は終了したターン、終了コードは 0 で、終わった理由は標準エラーに「ゲームが終わった：勝利（条件「…」、ターン …）」の1行で出る。詳しくは次の節を見る。
+
+### 勝利と敗北の条件
+
+`demo/end_condition_demo.gd` は、勝利と敗北の条件を式で書いたモデルを自動で回す。次の5点を表示する。
+
+1. 「人口が 120 以上」で勝利するモデルが、30 ターンの指定でも勝利のターン（4）で止まり、勝利と条件の名前が出る。
+2. 「お金が 0 以下」で敗北するモデルが、敗北のターンで止まる。
+3. 同じターンに勝利と敗北が成り立つモデルで、既定は敗北になり、`set_simultaneous_priority("victory")` で勝利に変わる。
+4. 終わった後に `step()`・`advance_turn()`・`apply_action()` を呼ぶと、`ERR_LOCKED`（Locked）と「ゲームは終了している」が返り、ストックの値が変わらない。
+5. 自動実行の入口（`AutoRunCli`）で、N の前に終わると、終了コード 0、最終行は終了したターン、理由は標準エラーに出る。
+
+```
+godot --headless --path . -s res://demo/end_condition_demo.gd
+```
+
+使い方（コードから）
+
+```gdscript
+model.add_victory_condition("人口が120以上", "population >= 120")
+model.add_defeat_condition("お金が0以下", "money <= 0")
+model.set_simultaneous_priority(GameResult.OUTCOME_VICTORY)  # 省くと、同時のときは敗北を採る
+model.game_ended.connect(_on_game_ended)  # (outcome: String, condition_name: String, turn: int)
+model.advance_turn()
+var result: GameResult = model.get_result()  # outcome は "victory"・"defeat"・"pending"
+```
+
+- 条件は式で書き、ストックと定数を参照できる。0 以外なら成り立つ。名前はストック・定数・フロー・アクションと同じ名前空間にあり、個数は `ModelCheck.MAX_DEFINITIONS`（1000）を共有する。式が参照するストックと定数は、先に定義する。
+- 判定は、`advance_turn()` が成功したターンの最後に1回だけ行う。ターン 0（初期状態）、`apply_action()` の直後、`step()` では判定しない。ゲームを進める入口は `advance_turn()` である。
+- 同じターンに勝利と敗北が成り立ったら、`set_simultaneous_priority()` で決めた側を採る（既定は敗北）。同じ種類の中では、定義の順で最初に成り立ったものを採る。
+- `game_ended` は `turn_finished` の後に発火する。
+- 終わった後の `step()`・`advance_turn()`・`apply_action()` は `ERR_LOCKED` を返し、状態を変えない。`last_error` は「ゲームは終了している」である。
+- 条件の式の評価に失敗したら（0 除算、NaN・無限大）、そのターン全体（ストック・定数・ターン番号・乱数の状態）を取り消し、`FAILED` を返す。ゲームは終わらない。判定では、成り立つ条件が先に見つかっても、すべての条件を評価する。
+- テキスト版（`TextPlayer`）は、ゲームが終わると結果を表示して終わる。
 
 ## CI
 

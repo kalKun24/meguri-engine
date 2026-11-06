@@ -19,6 +19,26 @@ var stock_names: Array[String] = []
 var rows: Array[PackedFloat64Array] = []
 
 
+## ゲームが終わって止まったときの結果（GameResult の写し）。N ターンを回し切ったときは、種類が未決（OUTCOME_PENDING）である。
+## 終わって止まったときも error は OK で、turns_completed は終わったターンと同じ（turns_requested より小さいことがある）。
+var game_result: GameResult = GameResult.new()
+
+
+## ゲームが N に達する前か N ちょうどで終わって、そこで止まったかを返す。
+func is_game_ended() -> bool:
+	return game_result.is_ended()
+
+
+## 終わった理由を1行にして返す。終わっていなければ空文字を返す。標準エラーに出す文である。
+## 条件の名前は、エスケープして省いた形で入れる。
+func describe_end() -> String:
+	if not game_result.is_ended():
+		return ""
+	return "ゲームが終わった：%s（条件「%s」、ターン %d、要求 %d ターン、シード：%d）" % [
+		game_result.outcome_label(), ModelCheck.escape(game_result.condition_name), game_result.turn, turns_requested, seed
+	]
+
+
 ## 成功したかを返す。
 func is_ok() -> bool:
 	return error == OK

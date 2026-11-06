@@ -113,3 +113,19 @@ func test_runtime_error_is_shown_with_attempted_turn_and_play_ends() -> void:
 	assert_str(text).contains("0 で割った")
 	assert_str(text).contains("ターンは進んでいない")
 	assert_str(text).contains("1: 在庫=")
+
+
+# 勝利か敗北で終わったら、結果（種類・条件の名前・ターン）を表示して終わる。残りの入力は読まない。
+func test_game_end_is_shown_and_play_ends() -> void:
+	var model := SimModel.new()
+	model.add_stock("a", 0.0)
+	model.add_flow("tick", "", "a", 1.0)
+	model.add_defeat_condition("lose" + char(0x202E), "a >= 2")
+	var io := BufferTextPlayIO.new(_enters(5))
+	var code := TextPlayer.new(model, io).run()
+	assert_int(code).is_equal(OK)
+	assert_int(model.get_turn()).is_equal(2)
+	var text := "\n".join(io.outputs)
+	assert_str(text).contains("2: a=2.0")
+	assert_str(text).contains("ゲームが終わった：敗北（条件「lose\\u{202E}」、ターン 2）")
+	assert_str(HostileValues.find_raw_invisible(text.replace("\n", ""))).is_empty()

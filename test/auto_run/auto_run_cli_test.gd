@@ -181,6 +181,41 @@ func test_runtime_error_prints_partial_csv_and_reason_separately() -> void:
 	assert_bool(String(result["stdout"]).contains("エラー")).is_false()
 
 
+## ゲームが N の前に終わる：そこで止まる。最終行は終了したターン、終了コードは 0、理由は標準エラーだけにある。
+func test_game_end_before_n_stops_with_exit_zero() -> void:
+	var result := _run(["--model=" + FIXTURES + "ending_model.gd", "--turns=30", "--seed=4"])
+	assert_int(result["code"]).is_equal(0)
+	assert_str(result["stdout"]).is_equal("turn,a\r\n0,0.0\r\n1,1.0\r\n2,2.0\r\n3,3.0\r\n4,4.0\r\n5,5.0\r\n")
+	var reason: String = result["stderr"]
+	assert_str(reason).contains("勝利")
+	assert_str(reason).contains("reach")
+	assert_str(reason).contains("ターン 5")
+	assert_str(reason).contains("要求 30")
+	assert_str(reason).contains("シード：4")
+	assert_int(reason.strip_edges().split("\n").size()).is_equal(1)
+	assert_bool(String(result["stdout"]).contains("勝利")).is_false()
+
+
+## N のほうが先に来るときは、標準エラーに終了の理由が出ない。
+func test_n_before_game_end_has_no_end_reason() -> void:
+	var result := _run(["--model=" + FIXTURES + "ending_model.gd", "--turns=3"])
+	assert_int(result["code"]).is_equal(0)
+	assert_str(result["stderr"]).is_empty()
+	assert_int(String(result["stdout"]).split("\r\n").size()).is_equal(1 + 4 + 1)
+
+
+## 終了の理由の条件の名前は、エスケープされる。--out のときも、終了コードは 0 で、理由は標準エラーに出る。
+func test_hostile_condition_name_is_escaped_in_end_reason() -> void:
+	var path := _temp_dir().path_join("end.csv")
+	var result := _run(["--model=" + FIXTURES + "hostile_ending_model.gd", "--turns=9", "--out=" + path])
+	assert_int(result["code"]).is_equal(0)
+	assert_str(result["stdout"]).is_empty()
+	assert_str(result["stderr"]).contains("\\u{202E}")
+	assert_str(result["stderr"]).contains("敗北")
+	assert_str(HostileValues.find_raw_invisible(String(result["stderr"]).replace("\n", ""))).is_empty()
+	assert_str(FileAccess.get_file_as_string(path)).is_equal("turn,a\r\n0,0.0\r\n1,1.0\r\n2,2.0\r\n")
+
+
 ## 見出しの名前は、RFC 4180 のクォートと、式の文字の無効化と、T2-1 のエスケープを通る。
 func test_hostile_names_in_header() -> void:
 	var result := _run(["--model=" + FIXTURES + "hostile_names_model.gd", "--turns=1"])

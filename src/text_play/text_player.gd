@@ -52,6 +52,13 @@ func run() -> Error:
 				_io.write_line("ターンは進んでいない。いまの状態：%s" % format_line())
 				return code
 			_io.write_line(format_line())
+			if _model.is_ended():
+				# 勝利か敗北で終わったら、結果を表示して終わる（終わった後は、ターンもアクションも進まない）。
+				var result := _model.get_result()
+				_io.write_line("ゲームが終わった：%s（条件「%s」、ターン %d）" % [
+					result.outcome_label(), ModelCheck.escape_excerpt(result.condition_name, ModelCheck.MAX_LABEL_LENGTH), result.turn
+				])
+				return OK
 			continue
 		var action_name := resolve_action(input)
 		if action_name.is_empty():
