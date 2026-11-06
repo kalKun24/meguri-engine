@@ -94,7 +94,7 @@ func add_flow_expr(flow_name: String, source: String, sink: String, expression: 
 
 ## 式のフローを組み立てる。すべての式について、名前の解決（ストックと定数だけを参照できる）、許可関数の検査、引数の数の検査を行う。
 ## 成功すると OK を返し、last_error を空にする。誤りがあれば ERR_INVALID_DATA を返し、
-## last_error に、フロー名・式の抜粋（ModelCheck.MAX_MESSAGE_EXPRESSION_LENGTH 文字まで）・文字位置・原因を入れる。
+## last_error に、フロー名・式の抜粋（ModelCheck.MAX_EXPRESSION_EXCERPT_LENGTH 文字まで）・文字位置・原因を入れる。
 ## step() は、組み立てが済んでいなければ最初に自分で呼ぶ。定義を足した後は、次の step() でもう一度行う。
 func validate() -> Error:
 	for flow: Dictionary in _flows:
