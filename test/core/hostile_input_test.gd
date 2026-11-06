@@ -146,7 +146,7 @@ func test_parse_with_hostile_strings() -> void:
 		assert_object(result.error).is_not_null()
 		var formatted: String = result.error.format()
 		# 行区切りの改行だけは、format() が意図して出す。行ごとに調べる。
-		assert_int(formatted.split("\n").size()).override_failure_message("format() の行数 " + label).is_equal(3)
+		assert_int(formatted.split("\n").size()).override_failure_message("format() の行数 " + label).is_between(2, 3)
 		for line in formatted.split("\n"):
 			assert_str(HostileValues.find_raw_invisible(line)).override_failure_message("format() " + label).is_empty()
 		assert_str(HostileValues.find_raw_invisible(result.error.message)).override_failure_message("message " + label).is_empty()
@@ -176,7 +176,7 @@ func test_overflow_pairs_stop_the_turn() -> void:
 # --- #29：エラー文に出す式の長さの上限（不変条件6）---
 
 func _assert_bounded(text: String, label: String) -> void:
-	assert_int(text.length()).override_failure_message("%s：エラー文が %d 文字（上限 %d）" % [label, text.length(), ModelCheck.MAX_ERROR_OUTPUT_LENGTH]).is_less_equal(ModelCheck.MAX_ERROR_OUTPUT_LENGTH)
+	assert_int(text.length()).override_failure_message("%s：エラー文が %d 文字（上限 %d）" % [label, text.length(), ModelCheck.MAX_LAST_ERROR_LENGTH]).is_less_equal(ModelCheck.MAX_LAST_ERROR_LENGTH)
 	assert_str(HostileValues.find_raw_invisible(text.replace("\n", ""))).override_failure_message("%s：生の不可視文字" % label).is_empty()
 
 
@@ -212,7 +212,7 @@ func test_syntax_error_shows_excerpt_and_position() -> void:
 		assert_int(model.add_flow_expr("f", "", "a", source)).is_equal(ERR_PARSE_ERROR)
 		assert_str(model.last_error).contains("...")
 		assert_str(model.last_error).contains("位置")
-		assert_int(model.last_error.length()).is_less_equal(ModelCheck.MAX_ERROR_OUTPUT_LENGTH)
+		assert_int(model.last_error.length()).is_less_equal(ModelCheck.MAX_LAST_ERROR_LENGTH)
 		_assert_bounded(model.last_error, "10万文字")
 
 
@@ -243,14 +243,29 @@ func test_long_valid_expression_is_excerpted_in_runtime_errors() -> void:
 	_assert_bounded(bad_effect.last_error, "add_action 効果の形")
 
 
-# 基準：構文エラーの ^ は、抜粋の中の position の文字の下に来る（位置が遠くても抜粋に入る）。
-func test_syntax_error_format_caret_in_excerpt() -> void:
-	var source: String = "1 + ".repeat(100) + "$" + " + 1".repeat(100)
-	var result: ExprParseResult = ExprParser.new().parse(source)
-	assert_bool(result.ok).is_false()
-	var lines := result.error.format().split("\n")
-	assert_int(lines.size()).is_equal(3)
-	assert_str(lines[1]).starts_with("  ...")
-	assert_str(lines[1]).ends_with("...")
-	assert_str(lines[1].substr(lines[2].length() - 1, 1)).is_equal("$")
-	assert_int(lines[1].length()).is_less_equal(ModelCheck.MAX_MESSAGE_EXPRESSION_LENGTH + 8)
+# 基準：構文エラーの ^ は、位置が抜粋の中にあるときだけ出し、抜粋の中の position の文字の下に来る。
+func test_syntax_error_format_caret_only_inside_excerpt() -> void:
+	var near: ExprParseResult = ExprParser.new().parse("1 + " + char(0x200B) + "$ " + "+ 1".repeat(100))
+	assert_bool(near.ok).is_false()
+	var near_lines := near.error.format().split("\n")
+	assert_int(near_lines.size()).is_equal(3)
+	assert_str(near_lines[1]).contains("\\u{200B}$")
+	assert_str(near_lines[1].substr(near_lines[2].length() - 1, 1)).is_equal("\\")
+	var far: ExprParseResult = ExprParser.new().parse("1 + ".repeat(100) + "$" + " + 1".repeat(100))
+	assert_bool(far.ok).is_false()
+	var far_text: String = far.error.format()
+	assert_str(far_text).contains("位置 400")
+	assert_int(far_text.split("\n").size()).is_equal(2)
+	assert_str(far_text.split("\n")[1]).ends_with("...")
+	assert_int(far_text.split("\n")[1].length()).is_less_equal(ModelCheck.MAX_EXPRESSION_EXCERPT_LENGTH + 2)
+
+
+# 基準：last_error の全体の上限。名前・原因・式がどれも長いときも、MAX_LAST_ERROR_LENGTH に収まる。
+func test_last_error_total_is_capped_with_long_names_and_expression() -> void:
+	var name_value: String = char(0x200B).repeat(32) + "x".repeat(30)
+	var model := SimModel.new()
+	model.add_stock(name_value, 1.0)
+	model.add_constant("k", 1.0)
+	var effect: String = name_value + " = " + char(0x200B).repeat(50) + "$"
+	assert_int(model.add_action(name_value + "a", "k", [effect])).is_not_equal(OK)
+	_assert_bounded(model.last_error, "名前も式も長い")

@@ -115,43 +115,68 @@ func test_blank_names_are_empty() -> void:
 	assert_str(ModelCheck.check_name(char(0x200B))).is_not_empty()
 
 
-func test_escape_expression_limits_length() -> void:
+# --- #29：式の抜粋。長さは、エスケープした後で数える ---
+
+func test_escape_expression_keeps_short_text_and_excerpts_long_text() -> void:
+	var limit: int = ModelCheck.MAX_EXPRESSION_EXCERPT_LENGTH
 	assert_str(ModelCheck.escape_expression("1 + 2")).is_equal("1 + 2")
-	assert_str(ModelCheck.escape_expression("x".repeat(ModelCheck.MAX_MESSAGE_EXPRESSION_LENGTH))).is_equal("x".repeat(ModelCheck.MAX_MESSAGE_EXPRESSION_LENGTH))
-	assert_str(ModelCheck.escape_expression("x".repeat(100000))).is_equal("x".repeat(ModelCheck.MAX_MESSAGE_EXPRESSION_LENGTH) + "...")
+	assert_str(ModelCheck.escape_expression("x".repeat(limit))).is_equal("x".repeat(limit))
+	assert_str(ModelCheck.escape_expression("x".repeat(limit + 1))).is_equal("x".repeat(limit - 3) + "...")
+	assert_str(ModelCheck.escape_expression("x".repeat(100000))).is_equal("x".repeat(limit - 3) + "...")
 
 
-# エスケープで長さが数倍になる文字列でも、出力は上限以内で、生の不可視文字が無い。
-func test_escape_expression_bounds_the_expanded_output() -> void:
-	for code in [0x01, 0xE0041, 0x10FFFD, 0x5C]:
+# エスケープで長さが数倍になる文字列でも、出力は上限以内で、エスケープの表記を途中で切らず、生の不可視文字が無い。
+func test_escape_expression_counts_length_after_escaping() -> void:
+	var limit: int = ModelCheck.MAX_EXPRESSION_EXCERPT_LENGTH
+	for code in [0x01, 0x200B, 0xE0041, 0x10FFFD, 0x5C]:
 		var escaped := ModelCheck.escape_expression(char(code).repeat(100000))
-		assert_int(escaped.length()).is_less_equal(ModelCheck.MAX_MESSAGE_EXPRESSION_LENGTH * 10 + 3)
+		assert_int(escaped.length()).override_failure_message("U+%04X：%d 文字" % [code, escaped.length()]).is_less_equal(limit)
+		assert_str(escaped).ends_with("...")
 		assert_str(HostileValues.find_raw_invisible(escaped)).is_empty()
+		# 「...」を除いた部分は、完全な表記の繰り返しだけである。
+		var body: String = escaped.substr(0, escaped.length() - 3)
+		var unit: String = ModelCheck.escape(char(code), 0)
+		assert_str(body).is_equal(unit.repeat(body.length() / unit.length()))
 	for label: String in HostileValues.strings():
 		var escaped := ModelCheck.escape_expression(HostileValues.strings()[label])
-		assert_int(escaped.length()).override_failure_message(label).is_less_equal(ModelCheck.MAX_MESSAGE_EXPRESSION_LENGTH * 10 + 3)
+		assert_int(escaped.length()).override_failure_message(label).is_less_equal(limit)
+
+
+func test_escape_excerpt_does_not_cut_a_notation_in_the_middle() -> void:
+	# 1文字が "\u{200B}"（8文字）になる。上限 20 なら、「...」の3文字を除いた17文字に、完全な表記が2つ（16文字）入る。
+	var text: String = char(0x200B).repeat(10)
+	assert_str(ModelCheck.escape_excerpt(text, 20)).is_equal("\\u{200B}\\u{200B}...")
+	assert_str(ModelCheck.escape_excerpt(char(0x200B).repeat(2), 16)).is_equal("\\u{200B}\\u{200B}")
+	assert_str(ModelCheck.escape_excerpt(char(0x200B).repeat(3), 16)).is_equal("\\u{200B}...")
 
 
 func test_escape_reason_limits_length_and_keeps_backslash() -> void:
 	assert_str(ModelCheck.escape_reason("\\u{202E}" + char(0x202E))).is_equal("\\u{202E}\\u{202E}")
-	assert_str(ModelCheck.escape_reason("x".repeat(100000))).is_equal("x".repeat(ModelCheck.MAX_MESSAGE_REASON_LENGTH) + "...")
+	assert_str(ModelCheck.escape_reason("x".repeat(100000))).is_equal("x".repeat(ModelCheck.MAX_MESSAGE_REASON_LENGTH - 3) + "...")
 
 
-func test_excerpt_around() -> void:
-	var short: Dictionary = ModelCheck.excerpt_around("1 + $", 4)
+func test_expression_excerpt_reports_the_caret_offset() -> void:
+	var short: Dictionary = ModelCheck.expression_excerpt("1 + $", 4)
 	assert_str(short["text"]).is_equal("1 + $")
 	assert_int(short["offset"]).is_equal(4)
+	var at_end: Dictionary = ModelCheck.expression_excerpt("1 +", 3)
+	assert_int(at_end["offset"]).is_equal(3)
+	var escaped_before: Dictionary = ModelCheck.expression_excerpt(char(0x200B) + "$", 1)
+	assert_int(escaped_before["offset"]).is_equal(8)
 	var source: String = "a".repeat(1000)
-	var middle: Dictionary = ModelCheck.excerpt_around(source, 500)
-	assert_str(middle["text"]).starts_with("...")
-	assert_str(middle["text"]).ends_with("...")
-	assert_int(middle["offset"]).is_equal(3 + ModelCheck.MAX_MESSAGE_EXPRESSION_LENGTH / 2)
-	var tail: Dictionary = ModelCheck.excerpt_around(source, 1000)
-	assert_str(tail["text"]).ends_with("a")
-	assert_int(tail["offset"]).is_less_equal(String(tail["text"]).length())
-	var invisible: Dictionary = ModelCheck.excerpt_around(char(0x200B).repeat(100000), 99999)
-	assert_int(String(invisible["text"]).length()).is_less_equal(ModelCheck.MAX_MESSAGE_EXPRESSION_LENGTH * 10 + 6)
-	var clamped: Dictionary = ModelCheck.excerpt_around("abc", 99)
-	assert_int(clamped["offset"]).is_equal(3)
-	var negative: Dictionary = ModelCheck.excerpt_around("abc", -5)
-	assert_int(negative["offset"]).is_equal(0)
+	assert_int(ModelCheck.expression_excerpt(source, 10)["offset"]).is_equal(10)
+	# 位置が抜粋の外にあるときは、-1 である（位置の数字だけが残る）。
+	assert_int(ModelCheck.expression_excerpt(source, 500)["offset"]).is_equal(-1)
+	assert_int(ModelCheck.expression_excerpt(source, 1000)["offset"]).is_equal(-1)
+	assert_int(ModelCheck.expression_excerpt("abc", -5)["offset"]).is_equal(-1)
+
+
+func test_limit_escaped_does_not_cut_a_notation_in_the_middle() -> void:
+	assert_str(ModelCheck.limit_escaped("abc", 10)).is_equal("abc")
+	assert_str(ModelCheck.limit_escaped("abcdefghij", 8)).is_equal("abcde...")
+	# 切れ目が \u{200B} の途中に当たるときは、その表記の手前で切る。
+	assert_str(ModelCheck.limit_escaped("ab\\u{200B}cd", 8)).is_equal("ab...")
+	# 二重のバックスラッシュも、1組を残すか、1組を省く。
+	assert_str(ModelCheck.limit_escaped("a\\\\\\\\b", 5)).is_equal("a...")
+	assert_str(ModelCheck.limit_escaped("a\\\\\\\\\\\\b", 7)).is_equal("a\\\\...")
+

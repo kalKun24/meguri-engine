@@ -370,5 +370,5 @@ func _succeed() -> Error:
 
 
 func _fail(code: Error, message: String) -> Error:
-	last_error = message
+	last_error = ModelCheck.limit_last_error(message)
 	return code
