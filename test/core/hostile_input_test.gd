@@ -269,3 +269,30 @@ func test_last_error_total_is_capped_with_long_names_and_expression() -> void:
 	var effect: String = name_value + " = " + char(0x200B).repeat(50) + "$"
 	assert_int(model.add_action(name_value + "a", "k", [effect])).is_not_equal(OK)
 	_assert_bounded(model.last_error, "名前も式も長い")
+
+
+# 基準：名前・流出元・流入先を受け取る全公開関数に共有一覧を流し、last_error が上限以内である。
+func test_last_error_is_bounded_for_names_in_every_public_function() -> void:
+	var all: Dictionary = HostileValues.strings()
+	for label: String in all:
+		var value: String = all[label]
+		var model := _new_model()
+		model.add_stock(value, 1.0)
+		_assert_bounded(model.last_error, "add_stock " + label)
+		model.add_constant(value, 1.0)
+		_assert_bounded(model.last_error, "add_constant " + label)
+		model.add_flow(value, "", "a", 1.0)
+		_assert_bounded(model.last_error, "add_flow 名前 " + label)
+		model.add_flow("f", value, "a", 1.0)
+		_assert_bounded(model.last_error, "add_flow 流出元 " + label)
+		model.add_flow("f", "a", value, 1.0)
+		_assert_bounded(model.last_error, "add_flow 流入先 " + label)
+		model.get_stock(value)
+		_assert_bounded(model.last_error, "get_stock " + label)
+		model.get_constant(value)
+		_assert_bounded(model.last_error, "get_constant " + label)
+		model.apply_action(value)
+		_assert_bounded(model.last_error, "apply_action " + label)
+		var town := TownModel.new()
+		town.build({value: 1.0})
+		_assert_bounded(town.last_error, "TownModel.build " + label)
