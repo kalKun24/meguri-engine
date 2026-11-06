@@ -55,7 +55,7 @@ func run() -> Error:
 			continue
 		var action_name := resolve_action(input)
 		if action_name.is_empty():
-			_io.write_line("分からない入力：「%s」" % ModelCheck.escape(input))
+			_io.write_line("分からない入力：「%s」" % ModelCheck.escape_excerpt(input, ModelCheck.MAX_LABEL_LENGTH))
 			_write_menu()
 			continue
 		_apply(action_name)
@@ -100,7 +100,7 @@ func _is_number(input: String) -> bool:
 
 
 func _label(table: Dictionary, key_name: String) -> String:
-	return ModelCheck.escape(String(table.get(key_name, key_name)), 0)
+	return ModelCheck.escape_excerpt(String(table.get(key_name, key_name)), ModelCheck.MAX_LABEL_LENGTH)
 
 
 func _write_menu() -> void:
@@ -125,7 +125,7 @@ func _apply(action_name: String) -> void:
 	var before := _param_values()
 	var code := _model.apply_action(action_name)
 	# get_stock() は成功すると last_error を空にするので、先に取っておく。
-	var message := ModelCheck.escape(_model.last_error, 0, false)
+	var message := ModelCheck.escape_excerpt(_model.last_error, ModelCheck.MAX_LAST_ERROR_LENGTH, false)
 	if code != OK:
 		_io.write_line("「%s」を実行できない（%s）：%s" % [label, error_string(code), message])
 		_io.write_line("ターンは進んでいない。いまの状態：%s" % format_line())
