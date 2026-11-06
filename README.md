@@ -85,7 +85,7 @@ godot --headless --path . -s res://demo/expr_parse_demo.gd -- "a + b" "f(1,"
 
 1. 人口が増えると食料が減るモデルを3ターン進め、式どおりに値が変わる。
 2. `1/2` が 0.5 になる（すべて float で評価する）。
-3. 許可されていない関数、未定義の名前、`OS.get_name()`、`()` なしの `min`、`Vector2(1, 2)`、引数の数の誤り、400 桁の数が、式の全文と文字位置つきのエラーになる。
+3. 許可されていない関数、未定義の名前、`OS.get_name()`、`()` なしの `min`、`Vector2(1, 2)`、引数の数の誤り、400 桁の数が、式の抜粋と文字位置つきのエラーになる。
 4. 0 除算がターン番号つきの実行時エラーになり、そのターンではストックの値もターン番号も変わらない。
 
 ```
@@ -114,6 +114,19 @@ godot --headless --path . -s res://demo/escape_demo.gd
 ```
 
 エスケープの対象は、`ModelCheck.ESCAPE_RANGES`（コードポイントの範囲表）で決める。表は `scripts/gen_invisible_ranges.py` で生成する（Unicode 16.0.0）。
+
+### エラー文に出す式の長さの上限
+
+`demo/excerpt_demo.gd` は、10万文字の式と、不可視文字 10万字の式を `add_flow_expr` に渡す。さらに、上限内で通る長い式が実行時に失敗する場合と、アクションの条件・効果が失敗する場合も試す。どの `last_error` も、式を先頭の抜粋に切り、末尾を「...」にする。位置は数字で出る。
+
+```
+godot --headless --path . -s res://demo/excerpt_demo.gd
+```
+
+- 式の抜粋は 200 文字まで（`ModelCheck.MAX_EXPRESSION_EXCERPT_LENGTH`）。原因の説明も 200 文字まで（`MAX_MESSAGE_REASON_LENGTH`）。長さは、エスケープした後で数える。`\u{XXXX}` の表記は、途中で切らない。
+- `last_error` 1件の全体は 1000 文字まで（`MAX_LAST_ERROR_LENGTH`）。
+- 位置が抜粋の外にあるときは、位置の数字だけが残る。`ExprSyntaxError.format()` の `^` の行も、このときは出ない。
+- 式をエラー文に出すときは、`ModelCheck.escape_expression()` を使う。式の全文を出す関数は無い。
 
 ### テキスト版の小さな町
 
