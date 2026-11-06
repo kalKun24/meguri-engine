@@ -146,7 +146,7 @@ func test_parse_with_hostile_strings() -> void:
 		assert_object(result.error).is_not_null()
 		var formatted: String = result.error.format()
 		# 行区切りの改行だけは、format() が意図して出す。行ごとに調べる。
-		assert_int(formatted.split("\n").size()).override_failure_message("format() の行数 " + label).is_equal(3)
+		assert_int(formatted.split("\n").size()).override_failure_message("format() の行数 " + label).is_between(2, 3)
 		for line in formatted.split("\n"):
 			assert_str(HostileValues.find_raw_invisible(line)).override_failure_message("format() " + label).is_empty()
 		assert_str(HostileValues.find_raw_invisible(result.error.message)).override_failure_message("message " + label).is_empty()
@@ -171,3 +171,128 @@ func test_overflow_pairs_stop_the_turn() -> void:
 		assert_int(expr_model.step()).is_equal(FAILED)
 		assert_int(expr_model.get_turn()).is_equal(0)
 		assert_float(expr_model.get_stock("a").value).is_equal(pair[0])
+
+
+# --- #29：エラー文に出す式の長さの上限（不変条件6）---
+
+func _assert_bounded(text: String, label: String) -> void:
+	assert_int(text.length()).override_failure_message("%s：エラー文が %d 文字（上限 %d）" % [label, text.length(), ModelCheck.MAX_LAST_ERROR_LENGTH]).is_less_equal(ModelCheck.MAX_LAST_ERROR_LENGTH)
+	assert_str(HostileValues.find_raw_invisible(text.replace("\n", ""))).override_failure_message("%s：生の不可視文字" % label).is_empty()
+
+
+# 基準：共有一覧の全件を式として渡しても、last_error が上限以内で、生の不可視文字が無い。
+func test_error_text_length_is_bounded_for_every_hostile_string() -> void:
+	for label: String in HostileValues.strings():
+		var value: String = HostileValues.strings()[label]
+		var model := _new_model()
+		model.add_flow_expr("f", "", "a", value)
+		_assert_bounded(model.last_error, "add_flow_expr " + label)
+		model.validate()
+		_assert_bounded(model.last_error, "validate " + label)
+		model.step()
+		_assert_bounded(model.last_error, "step " + label)
+		var action_model := _new_model()
+		action_model.add_action("act", value, ["a = 1"])
+		_assert_bounded(action_model.last_error, "add_action 条件 " + label)
+		action_model.add_action("act", "1", ["a = " + value])
+		_assert_bounded(action_model.last_error, "add_action 効果の式 " + label)
+		action_model.add_action("act", "1", [value])
+		_assert_bounded(action_model.last_error, "add_action 効果全体 " + label)
+		action_model.apply_action("act")
+		_assert_bounded(action_model.last_error, "apply_action " + label)
+		var result: ExprParseResult = ExprParser.new().parse(value)
+		if not result.ok:
+			_assert_bounded(result.error.format(), "format " + label)
+
+
+# 基準：構文エラーの式が10万文字でも、不可視文字10万字でも、抜粋になり、位置の数字が出る。
+func test_syntax_error_shows_excerpt_and_position() -> void:
+	for source: String in [" ".repeat(10) + "x".repeat(100000), char(0x200B).repeat(100000)]:
+		var model := _new_model()
+		assert_int(model.add_flow_expr("f", "", "a", source)).is_equal(ERR_PARSE_ERROR)
+		assert_str(model.last_error).contains("...")
+		assert_str(model.last_error).contains("位置")
+		assert_int(model.last_error.length()).is_less_equal(ModelCheck.MAX_LAST_ERROR_LENGTH)
+		_assert_bounded(model.last_error, "10万文字")
+
+
+# 基準：実行時・条件・組み立て時に、上限を超える長い式（上限内で通る式）を出すときも、抜粋になる。
+func test_long_valid_expression_is_excerpted_in_runtime_errors() -> void:
+	var long_zero: String = "0" + " + 0".repeat(200)
+	var model := _new_model()
+	assert_int(model.add_flow_expr("f", "", "a", long_zero + " + 1 / 0")).is_equal(OK)
+	assert_int(model.step()).is_equal(FAILED)
+	assert_str(model.last_error).contains("...")
+	_assert_bounded(model.last_error, "step 実行時エラー")
+	var unknown := _new_model()
+	assert_int(unknown.add_flow_expr("f", "", "a", long_zero + " + nothing")).is_equal(OK)
+	assert_int(unknown.validate()).is_equal(ERR_INVALID_DATA)
+	assert_str(unknown.last_error).contains("...")
+	_assert_bounded(unknown.last_error, "validate")
+	var action_model := _new_model()
+	assert_int(action_model.add_action("act", long_zero, ["a = 1"])).is_equal(OK)
+	assert_int(action_model.apply_action("act")).is_equal(ERR_UNAVAILABLE)
+	assert_str(action_model.last_error).contains("...")
+	_assert_bounded(action_model.last_error, "apply_action 条件")
+	assert_int(action_model.add_action("act2", "1", ["a = " + long_zero + " + 1 / 0"])).is_equal(OK)
+	assert_int(action_model.apply_action("act2")).is_equal(FAILED)
+	_assert_bounded(action_model.last_error, "apply_action 効果")
+	var bad_effect := _new_model()
+	assert_int(bad_effect.add_action("act", "1", [long_zero])).is_equal(ERR_INVALID_PARAMETER)
+	assert_str(bad_effect.last_error).contains("...")
+	_assert_bounded(bad_effect.last_error, "add_action 効果の形")
+
+
+# 基準：構文エラーの ^ は、位置が抜粋の中にあるときだけ出し、抜粋の中の position の文字の下に来る。
+func test_syntax_error_format_caret_only_inside_excerpt() -> void:
+	var near: ExprParseResult = ExprParser.new().parse("1 + " + char(0x200B) + "$ " + "+ 1".repeat(100))
+	assert_bool(near.ok).is_false()
+	var near_lines := near.error.format().split("\n")
+	assert_int(near_lines.size()).is_equal(3)
+	assert_str(near_lines[1]).contains("\\u{200B}$")
+	assert_str(near_lines[1].substr(near_lines[2].length() - 1, 1)).is_equal("\\")
+	var far: ExprParseResult = ExprParser.new().parse("1 + ".repeat(100) + "$" + " + 1".repeat(100))
+	assert_bool(far.ok).is_false()
+	var far_text: String = far.error.format()
+	assert_str(far_text).contains("位置 400")
+	assert_int(far_text.split("\n").size()).is_equal(2)
+	assert_str(far_text.split("\n")[1]).ends_with("...")
+	assert_int(far_text.split("\n")[1].length()).is_less_equal(ModelCheck.MAX_EXPRESSION_EXCERPT_LENGTH + 2)
+
+
+# 基準：last_error の全体の上限。名前・原因・式がどれも長いときも、MAX_LAST_ERROR_LENGTH に収まる。
+func test_last_error_total_is_capped_with_long_names_and_expression() -> void:
+	var name_value: String = char(0x200B).repeat(32) + "x".repeat(30)
+	var model := SimModel.new()
+	model.add_stock(name_value, 1.0)
+	model.add_constant("k", 1.0)
+	var effect: String = name_value + " = " + char(0x200B).repeat(50) + "$"
+	assert_int(model.add_action(name_value + "a", "k", [effect])).is_not_equal(OK)
+	_assert_bounded(model.last_error, "名前も式も長い")
+
+
+# 基準：名前・流出元・流入先を受け取る全公開関数に共有一覧を流し、last_error が上限以内である。
+func test_last_error_is_bounded_for_names_in_every_public_function() -> void:
+	var all: Dictionary = HostileValues.strings()
+	for label: String in all:
+		var value: String = all[label]
+		var model := _new_model()
+		model.add_stock(value, 1.0)
+		_assert_bounded(model.last_error, "add_stock " + label)
+		model.add_constant(value, 1.0)
+		_assert_bounded(model.last_error, "add_constant " + label)
+		model.add_flow(value, "", "a", 1.0)
+		_assert_bounded(model.last_error, "add_flow 名前 " + label)
+		model.add_flow("f", value, "a", 1.0)
+		_assert_bounded(model.last_error, "add_flow 流出元 " + label)
+		model.add_flow("f", "a", value, 1.0)
+		_assert_bounded(model.last_error, "add_flow 流入先 " + label)
+		model.get_stock(value)
+		_assert_bounded(model.last_error, "get_stock " + label)
+		model.get_constant(value)
+		_assert_bounded(model.last_error, "get_constant " + label)
+		model.apply_action(value)
+		_assert_bounded(model.last_error, "apply_action " + label)
+		var town := TownModel.new()
+		town.build({value: 1.0})
+		_assert_bounded(town.last_error, "TownModel.build " + label)

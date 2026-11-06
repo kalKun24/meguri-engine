@@ -33,7 +33,7 @@ func _init(model: SimModel, io: TextPlayIO, labels: Dictionary = {}, action_labe
 ## 現在の状態を1行で表示してから、入力を待つ。
 ## 空行ならターンを進める。番号か名前ならアクションを実行する（ターンは進まない）。q か EOF で OK を返して終わる。
 ## 分からない入力と、実行に失敗したアクションは、理由を表示して入力待ちに戻る（ターンは進まない）。
-## step() が失敗したら、そのエラーコードを返して終わる（理由は表示済み。ターンは進まないので、入力待ちには戻らず終わる）。
+## advance_turn() が失敗したら、そのエラーコードを返して終わる（理由は表示済み。ターンは進まないので、入力待ちには戻らず終わる）。
 func run() -> Error:
 	_io.write_line("Enter で次のターンに進む。q で終わる。")
 	_write_menu()
@@ -43,7 +43,7 @@ func run() -> Error:
 		if _io.is_eof() or input == QUIT_INPUT:
 			return OK
 		if input.is_empty():
-			var code := _model.step()
+			var code := _model.advance_turn()
 			if code != OK:
 				# get_stock() は成功すると last_error を空にするので、先に取っておく。
 				var message := _model.last_error
@@ -52,10 +52,17 @@ func run() -> Error:
 				_io.write_line("ターンは進んでいない。いまの状態：%s" % format_line())
 				return code
 			_io.write_line(format_line())
+			if _model.is_ended():
+				# 勝利か敗北で終わったら、結果を表示して終わる（終わった後は、ターンもアクションも進まない）。
+				var result := _model.get_result()
+				_io.write_line("ゲームが終わった：%s（条件「%s」、ターン %d）" % [
+					result.outcome_label(), ModelCheck.escape_excerpt(result.condition_name, ModelCheck.MAX_LABEL_LENGTH), result.turn
+				])
+				return OK
 			continue
 		var action_name := resolve_action(input)
 		if action_name.is_empty():
-			_io.write_line("分からない入力：「%s」" % ModelCheck.escape(input))
+			_io.write_line("分からない入力：「%s」" % ModelCheck.escape_excerpt(input, ModelCheck.MAX_LABEL_LENGTH))
 			_write_menu()
 			continue
 		_apply(action_name)
@@ -100,7 +107,7 @@ func _is_number(input: String) -> bool:
 
 
 func _label(table: Dictionary, key_name: String) -> String:
-	return ModelCheck.escape(String(table.get(key_name, key_name)), 0)
+	return ModelCheck.escape_excerpt(String(table.get(key_name, key_name)), ModelCheck.MAX_LABEL_LENGTH)
 
 
 func _write_menu() -> void:
@@ -125,7 +132,7 @@ func _apply(action_name: String) -> void:
 	var before := _param_values()
 	var code := _model.apply_action(action_name)
 	# get_stock() は成功すると last_error を空にするので、先に取っておく。
-	var message := ModelCheck.escape(_model.last_error, 0, false)
+	var message := ModelCheck.escape_excerpt(_model.last_error, ModelCheck.MAX_LAST_ERROR_LENGTH, false)
 	if code != OK:
 		_io.write_line("「%s」を実行できない（%s）：%s" % [label, error_string(code), message])
 		_io.write_line("ターンは進んでいない。いまの状態：%s" % format_line())

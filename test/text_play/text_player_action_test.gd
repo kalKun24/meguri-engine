@@ -227,3 +227,13 @@ func test_hostile_floats_are_refused_before_reaching_the_display() -> void:
 	for label: String in HostileValues.floats():
 		var model := SimModel.new()
 		assert_int(model.add_stock("s", HostileValues.floats()[label])).is_equal(ERR_INVALID_PARAMETER)
+
+
+# #29：表示名が長くても、画面に出る長さには上限がある（不変条件6）。
+func test_long_labels_are_truncated_on_screen() -> void:
+	for value: String in [char(0xE0041).repeat(100000), "x".repeat(100000)]:
+		var model := TownModel.new().build()
+		var io := BufferTextPlayIO.new(["1", "q"] as Array[String])
+		TextPlayer.new(model, io, {"population": value}, {"expand_farmland": value}, {"farmland": value}).run()
+		for line in io.outputs:
+			assert_int(line.length()).override_failure_message("画面の1行が %d 文字" % line.length()).is_less_equal(ModelCheck.MAX_LAST_ERROR_LENGTH)

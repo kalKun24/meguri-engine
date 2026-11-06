@@ -70,7 +70,7 @@ func build(overrides: Dictionary = {}) -> SimModel:
 	var params: Dictionary = DEFAULT_PARAMS.duplicate()
 	for key: Variant in overrides:
 		if not params.has(key):
-			last_error = "未知のパラメータ：%s" % ModelCheck.escape(str(key), 0)
+			last_error = "未知のパラメータ：%s" % ModelCheck.escape_excerpt(str(key), ModelCheck.MAX_LABEL_LENGTH)
 			return null
 		params[key] = overrides[key]
 
@@ -120,6 +120,6 @@ func _add_actions(model: SimModel) -> bool:
 
 func _check(code: Error, model: SimModel) -> bool:
 	if code != OK:
-		last_error = "%s：%s" % [error_string(code), model.last_error]
+		last_error = ModelCheck.limit_last_error("%s：%s" % [error_string(code), model.last_error])
 		return false
 	return true

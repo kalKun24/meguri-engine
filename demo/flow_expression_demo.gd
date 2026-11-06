@@ -37,7 +37,7 @@ func _show_float_division() -> void:
 
 
 func _show_build_time_rejections() -> void:
-	print("3. 組み立て時のエラー（式の全文と文字位置つき）")
+	print("3. 組み立て時のエラー（式の抜粋と文字位置つき）")
 	var cases: Array[String] = ["1 + system(2)", "population + lost_name", "OS.get_name()", "min", "Vector2(1, 2)", "min(1)", "1 + " + "9".repeat(400)]
 	for expression in cases:
 		var model := SimModel.new()
