@@ -171,3 +171,86 @@ func test_overflow_pairs_stop_the_turn() -> void:
 		assert_int(expr_model.step()).is_equal(FAILED)
 		assert_int(expr_model.get_turn()).is_equal(0)
 		assert_float(expr_model.get_stock("a").value).is_equal(pair[0])
+
+
+# --- #29：エラー文に出す式の長さの上限（不変条件6）---
+
+func _assert_bounded(text: String, label: String) -> void:
+	assert_int(text.length()).override_failure_message("%s：エラー文が %d 文字（上限 %d）" % [label, text.length(), ModelCheck.MAX_ERROR_OUTPUT_LENGTH]).is_less_equal(ModelCheck.MAX_ERROR_OUTPUT_LENGTH)
+	assert_str(HostileValues.find_raw_invisible(text.replace("\n", ""))).override_failure_message("%s：生の不可視文字" % label).is_empty()
+
+
+# 基準：共有一覧の全件を式として渡しても、last_error が上限以内で、生の不可視文字が無い。
+func test_error_text_length_is_bounded_for_every_hostile_string() -> void:
+	for label: String in HostileValues.strings():
+		var value: String = HostileValues.strings()[label]
+		var model := _new_model()
+		model.add_flow_expr("f", "", "a", value)
+		_assert_bounded(model.last_error, "add_flow_expr " + label)
+		model.validate()
+		_assert_bounded(model.last_error, "validate " + label)
+		model.step()
+		_assert_bounded(model.last_error, "step " + label)
+		var action_model := _new_model()
+		action_model.add_action("act", value, ["a = 1"])
+		_assert_bounded(action_model.last_error, "add_action 条件 " + label)
+		action_model.add_action("act", "1", ["a = " + value])
+		_assert_bounded(action_model.last_error, "add_action 効果の式 " + label)
+		action_model.add_action("act", "1", [value])
+		_assert_bounded(action_model.last_error, "add_action 効果全体 " + label)
+		action_model.apply_action("act")
+		_assert_bounded(action_model.last_error, "apply_action " + label)
+		var result: ExprParseResult = ExprParser.new().parse(value)
+		if not result.ok:
+			_assert_bounded(result.error.format(), "format " + label)
+
+
+# 基準：構文エラーの式が10万文字でも、不可視文字10万字でも、抜粋になり、位置の数字が出る。
+func test_syntax_error_shows_excerpt_and_position() -> void:
+	for source: String in [" ".repeat(10) + "x".repeat(100000), char(0x200B).repeat(100000)]:
+		var model := _new_model()
+		assert_int(model.add_flow_expr("f", "", "a", source)).is_equal(ERR_PARSE_ERROR)
+		assert_str(model.last_error).contains("...")
+		assert_str(model.last_error).contains("位置")
+		assert_int(model.last_error.length()).is_less_equal(ModelCheck.MAX_ERROR_OUTPUT_LENGTH)
+		_assert_bounded(model.last_error, "10万文字")
+
+
+# 基準：実行時・条件・組み立て時に、上限を超える長い式（上限内で通る式）を出すときも、抜粋になる。
+func test_long_valid_expression_is_excerpted_in_runtime_errors() -> void:
+	var long_zero: String = "0" + " + 0".repeat(200)
+	var model := _new_model()
+	assert_int(model.add_flow_expr("f", "", "a", long_zero + " + 1 / 0")).is_equal(OK)
+	assert_int(model.step()).is_equal(FAILED)
+	assert_str(model.last_error).contains("...")
+	_assert_bounded(model.last_error, "step 実行時エラー")
+	var unknown := _new_model()
+	assert_int(unknown.add_flow_expr("f", "", "a", long_zero + " + nothing")).is_equal(OK)
+	assert_int(unknown.validate()).is_equal(ERR_INVALID_DATA)
+	assert_str(unknown.last_error).contains("...")
+	_assert_bounded(unknown.last_error, "validate")
+	var action_model := _new_model()
+	assert_int(action_model.add_action("act", long_zero, ["a = 1"])).is_equal(OK)
+	assert_int(action_model.apply_action("act")).is_equal(ERR_UNAVAILABLE)
+	assert_str(action_model.last_error).contains("...")
+	_assert_bounded(action_model.last_error, "apply_action 条件")
+	assert_int(action_model.add_action("act2", "1", ["a = " + long_zero + " + 1 / 0"])).is_equal(OK)
+	assert_int(action_model.apply_action("act2")).is_equal(FAILED)
+	_assert_bounded(action_model.last_error, "apply_action 効果")
+	var bad_effect := _new_model()
+	assert_int(bad_effect.add_action("act", "1", [long_zero])).is_equal(ERR_INVALID_PARAMETER)
+	assert_str(bad_effect.last_error).contains("...")
+	_assert_bounded(bad_effect.last_error, "add_action 効果の形")
+
+
+# 基準：構文エラーの ^ は、抜粋の中の position の文字の下に来る（位置が遠くても抜粋に入る）。
+func test_syntax_error_format_caret_in_excerpt() -> void:
+	var source: String = "1 + ".repeat(100) + "$" + " + 1".repeat(100)
+	var result: ExprParseResult = ExprParser.new().parse(source)
+	assert_bool(result.ok).is_false()
+	var lines := result.error.format().split("\n")
+	assert_int(lines.size()).is_equal(3)
+	assert_str(lines[1]).starts_with("  ...")
+	assert_str(lines[1]).ends_with("...")
+	assert_str(lines[1].substr(lines[2].length() - 1, 1)).is_equal("$")
+	assert_int(lines[1].length()).is_less_equal(ModelCheck.MAX_MESSAGE_EXPRESSION_LENGTH + 8)

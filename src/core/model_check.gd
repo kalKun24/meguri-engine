@@ -12,6 +12,16 @@ const MAX_DEFINITIONS: int = 1000
 const MAX_ACTION_EFFECTS: int = 50
 ## エラー文に名前を出すときの最大長（文字数）。超えた分は「...」で省く。
 const MAX_MESSAGE_NAME_LENGTH: int = 32
+## エラー文に式（条件・効果の式を含む）を出すときの最大長（文字数）。超えた分は「...」で省く。
+## エスケープで1文字が最長10文字（\u{10FFFF}）になっても、出力は 1003 文字以内に収まる。
+const MAX_MESSAGE_EXPRESSION_LENGTH: int = 100
+## エラー文に原因の説明（式の構文・評価のメッセージ）を出すときの最大長（文字数）。超えた分は「...」で省く。
+const MAX_MESSAGE_REASON_LENGTH: int = 200
+## 画面に出す表示名（ストック・アクションなどの表示名）の最大長（文字数）。超えた分は「...」で省く。
+const MAX_LABEL_LENGTH: int = 64
+## SimModel の last_error と ExprSyntaxError.format() の長さ（エスケープ後の文字数）の上限。
+## 名前・式・原因の各上限が、エスケープで最長の10文字に伸びたときの合計に、定型文の分を足しても、これを超えない。
+const MAX_ERROR_OUTPUT_LENGTH: int = 4000
 
 
 ## 名前を検査する。空（空白だけ・不可視文字だけを含む）、または MAX_NAME_LENGTH を超えると理由を返す。問題が無ければ空文字を返す。
@@ -45,7 +55,7 @@ static func check_finite(value: float, what: String = "値") -> String:
 
 ## 利用者の入力をエラー文やログに出すためのエスケープ。
 ## ESCAPE_RANGES（Cc・Cf・Zl・Zp・Co、U+0020 以外の Zs、Default_Ignorable_Code_Point）の文字を \u{XXXX} の形にし、バックスラッシュは二重にする。
-## limit 文字を超える分は「...」で省く。既定は MAX_MESSAGE_NAME_LENGTH である。0 以下を渡すと省かず、全文を出す（式の全文など）。
+## limit 文字を超える分は「...」で省く。既定は MAX_MESSAGE_NAME_LENGTH である。0 以下を渡すと省かない。外部由来の文字列には使わない（式は escape_expression を使う）。
 ## escape_backslash を false にすると、バックスラッシュを二重にしない。既にエスケープ済みの文を、もう一度安全にするときに使う。
 static func escape(text: String, limit: int = MAX_MESSAGE_NAME_LENGTH, escape_backslash: bool = true) -> String:
 	var parts := PackedStringArray()
@@ -63,6 +73,31 @@ static func escape(text: String, limit: int = MAX_MESSAGE_NAME_LENGTH, escape_ba
 			parts.append(text[i])
 		count += 1
 	return "".join(parts)
+
+
+## 式をエラー文やログに出すためのエスケープ。escape と同じ変換をし、MAX_MESSAGE_EXPRESSION_LENGTH 文字を超える分は「...」で省く。
+## 式の全文を出してはならない（長さに上限が無いと、エラー文が際限なく伸びる）。位置は別に数字で出す。
+static func escape_expression(text: String) -> String:
+	return escape(text, MAX_MESSAGE_EXPRESSION_LENGTH)
+
+
+## エラーの原因の説明（式の構文・評価のメッセージ）をエラー文に出すためのエスケープ。
+## 説明は生成時にエスケープ済みの文でもよいので、バックスラッシュは二重にしない。MAX_MESSAGE_REASON_LENGTH 文字を超える分は「...」で省く。
+static func escape_reason(text: String) -> String:
+	return escape(text, MAX_MESSAGE_REASON_LENGTH, false)
+
+
+## 式の中の position 付近を、エラー文に出す抜粋にする。escape_expression と違い、position が長い式の後ろにあっても抜粋に入る。
+## 抜粋は、position の前に最大 MAX_MESSAGE_EXPRESSION_LENGTH / 2 文字、全体で最大 MAX_MESSAGE_EXPRESSION_LENGTH 文字の範囲である。
+## 省いた側には「...」を付ける。返す Dictionary は、"text"（エスケープ済みの抜粋）と "offset"（text の中で position の文字が始まる位置）を持つ。
+static func excerpt_around(text: String, position: int) -> Dictionary:
+	var clamped: int = clampi(position, 0, text.length())
+	var start: int = maxi(0, clamped - MAX_MESSAGE_EXPRESSION_LENGTH / 2)
+	var end: int = mini(text.length(), start + MAX_MESSAGE_EXPRESSION_LENGTH)
+	var head: String = "..." if start > 0 else ""
+	var tail: String = "..." if end < text.length() else ""
+	var offset: int = head.length() + escape(text.substr(start, clamped - start), 0).length()
+	return {"text": head + escape(text.substr(start, end - start), 0) + tail, "offset": offset}
 
 
 ## コードポイントが、エスケープの対象かを返す。ESCAPE_RANGES を二分探索で引く。

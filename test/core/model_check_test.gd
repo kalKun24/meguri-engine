@@ -113,3 +113,45 @@ func test_blank_names_are_empty() -> void:
 	assert_bool(ModelCheck.is_blank(" a ")).is_false()
 	assert_str(ModelCheck.check_name(" ")).is_not_empty()
 	assert_str(ModelCheck.check_name(char(0x200B))).is_not_empty()
+
+
+func test_escape_expression_limits_length() -> void:
+	assert_str(ModelCheck.escape_expression("1 + 2")).is_equal("1 + 2")
+	assert_str(ModelCheck.escape_expression("x".repeat(ModelCheck.MAX_MESSAGE_EXPRESSION_LENGTH))).is_equal("x".repeat(ModelCheck.MAX_MESSAGE_EXPRESSION_LENGTH))
+	assert_str(ModelCheck.escape_expression("x".repeat(100000))).is_equal("x".repeat(ModelCheck.MAX_MESSAGE_EXPRESSION_LENGTH) + "...")
+
+
+# エスケープで長さが数倍になる文字列でも、出力は上限以内で、生の不可視文字が無い。
+func test_escape_expression_bounds_the_expanded_output() -> void:
+	for code in [0x01, 0xE0041, 0x10FFFD, 0x5C]:
+		var escaped := ModelCheck.escape_expression(char(code).repeat(100000))
+		assert_int(escaped.length()).is_less_equal(ModelCheck.MAX_MESSAGE_EXPRESSION_LENGTH * 10 + 3)
+		assert_str(HostileValues.find_raw_invisible(escaped)).is_empty()
+	for label: String in HostileValues.strings():
+		var escaped := ModelCheck.escape_expression(HostileValues.strings()[label])
+		assert_int(escaped.length()).override_failure_message(label).is_less_equal(ModelCheck.MAX_MESSAGE_EXPRESSION_LENGTH * 10 + 3)
+
+
+func test_escape_reason_limits_length_and_keeps_backslash() -> void:
+	assert_str(ModelCheck.escape_reason("\\u{202E}" + char(0x202E))).is_equal("\\u{202E}\\u{202E}")
+	assert_str(ModelCheck.escape_reason("x".repeat(100000))).is_equal("x".repeat(ModelCheck.MAX_MESSAGE_REASON_LENGTH) + "...")
+
+
+func test_excerpt_around() -> void:
+	var short: Dictionary = ModelCheck.excerpt_around("1 + $", 4)
+	assert_str(short["text"]).is_equal("1 + $")
+	assert_int(short["offset"]).is_equal(4)
+	var source: String = "a".repeat(1000)
+	var middle: Dictionary = ModelCheck.excerpt_around(source, 500)
+	assert_str(middle["text"]).starts_with("...")
+	assert_str(middle["text"]).ends_with("...")
+	assert_int(middle["offset"]).is_equal(3 + ModelCheck.MAX_MESSAGE_EXPRESSION_LENGTH / 2)
+	var tail: Dictionary = ModelCheck.excerpt_around(source, 1000)
+	assert_str(tail["text"]).ends_with("a")
+	assert_int(tail["offset"]).is_less_equal(String(tail["text"]).length())
+	var invisible: Dictionary = ModelCheck.excerpt_around(char(0x200B).repeat(100000), 99999)
+	assert_int(String(invisible["text"]).length()).is_less_equal(ModelCheck.MAX_MESSAGE_EXPRESSION_LENGTH * 10 + 6)
+	var clamped: Dictionary = ModelCheck.excerpt_around("abc", 99)
+	assert_int(clamped["offset"]).is_equal(3)
+	var negative: Dictionary = ModelCheck.excerpt_around("abc", -5)
+	assert_int(negative["offset"]).is_equal(0)
