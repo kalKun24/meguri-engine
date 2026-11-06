@@ -23,6 +23,8 @@ static func check_request(turns: int, stock_count: int) -> String:
 ## 引数が不正なら、何も実行せず error = ERR_INVALID_PARAMETER の結果を返す（表は空）。
 ## 実行時エラー（advance_turn() の失敗）で止まったときは、止まるまでの表を返し、error と message にその理由を入れる。
 ## 値が NaN・無限大のときも、その時点で止める。
+## ゲームが勝利か敗北で終わったときは、N に達する前でも、そこで止まる。error は OK のままで、表の最後の行は終了したターンである。
+## 終わった結果は game_result に入る。条件の式の評価に失敗したときは、advance_turn() の失敗として扱う（上と同じ）。
 func run(model: SimModel, turns: int, seed_value: int = 0) -> AutoRunResult:
 	var result := AutoRunResult.new()
 	result.seed = seed_value
@@ -46,6 +48,10 @@ func run(model: SimModel, turns: int, seed_value: int = 0) -> AutoRunResult:
 		if stopped.error != OK:
 			return stopped
 		result.turns_completed = turn
+		# 勝利か敗北で終わったら、N に達していなくても、そこで止まる。最終行は終了したターンである。
+		if model.is_ended():
+			result.game_result = model.get_result()
+			return result
 	return result
 
 

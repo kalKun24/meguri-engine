@@ -8,6 +8,8 @@
 ##   --out=FILE           省略時は標準出力。
 ##
 ## 終了コード：0 成功、1 実行時エラー（そのターンまでの CSV は出す）、2 引数・モデルの誤り（何も出さない）、3 出力先に書けない。
+## モデルの勝利・敗北の条件で N の前にゲームが終わったときは、そこで止まる。CSV の最終行は終了したターン、終了コードは 0 で、
+## 終了の理由（種類・条件の名前・ターン）を標準エラーに1行で出す。
 ## CSV は標準出力かファイルへ、理由は標準エラーへ出す。CSV に理由は混ぜない。
 class_name AutoRunCli
 extends RefCounted
@@ -73,6 +75,9 @@ func execute(args: PackedStringArray) -> int:
 		if not write_problem.is_empty():
 			_fail("出力先に書けない", write_problem)
 			code = EXIT_OUTPUT_FAILED
+	if result.is_game_ended():
+		# 勝利か敗北で N の前に終わっても、成功である（終了コードは 0）。理由は標準エラーに出す。
+		_stderr_sink.call(ModelCheck.escape_excerpt(result.describe_end(), ModelCheck.MAX_LAST_ERROR_LENGTH, false) + "\n")
 	if not result.is_ok():
 		_fail("実行時エラー（シード：%d）" % result.seed, result.message)
 		if code == EXIT_OK:

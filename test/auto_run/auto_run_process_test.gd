@@ -152,6 +152,29 @@ func test_runtime_error_splits_csv_and_reason() -> void:
 	assert_bool(reason.contains("turn,a,b")).is_false()
 
 
+## ゲームが N の前に終わる（実際のプロセス）：終了コード 0。標準出力の最終行は終了したターン、理由は標準エラーの1行だけにある。
+func test_game_end_before_n_stops_the_process_run() -> void:
+	var run := _launch(["--model=" + FIXTURES + "ending_model.gd", "--turns=30", "--seed=2"])
+	assert_int(run["code"]).is_equal(0)
+	var csv := _text(run["stdout"])
+	var lines := csv.split("\r\n")
+	assert_int(lines.size()).is_equal(8)
+	assert_str(lines[6]).is_equal("5,5.0")
+	assert_bool(csv.contains("勝利")).is_false()
+	var reason := _text(run["stderr"])
+	assert_int(reason.strip_edges().split("\n").size()).is_equal(1)
+	assert_str(reason).contains("勝利")
+	assert_str(reason).contains("reach")
+	assert_str(reason).contains("ターン 5")
+	assert_bool(reason.contains("ERROR")).is_false()
+	assert_bool(reason.contains("WARNING")).is_false()
+	# 敗北でも同じ（名前の不可視文字はエスケープされ、標準エラーは正しい UTF-8 である）。
+	var defeat := _launch(["--model=" + FIXTURES + "hostile_ending_model.gd", "--turns=9"])
+	assert_int(defeat["code"]).is_equal(0)
+	assert_str(_text(defeat["stderr"])).contains("\\u{202E}")
+	assert_bool(_text(defeat["stderr"]).to_utf8_buffer() == defeat["stderr"]).is_true()
+
+
 ## 引数の不正な UTF-8（bash の $'\xff'）は、終了コード 2 で、落ちない。標準エラーにも不正なバイトは残らない。
 func test_invalid_utf8_argument() -> void:
 	var run := _launch([], "--turns=3 $'--model=res://\\xff\\xfe.gd'")
