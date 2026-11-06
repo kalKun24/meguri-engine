@@ -33,7 +33,7 @@ func _init(model: SimModel, io: TextPlayIO, labels: Dictionary = {}, action_labe
 ## 現在の状態を1行で表示してから、入力を待つ。
 ## 空行ならターンを進める。番号か名前ならアクションを実行する（ターンは進まない）。q か EOF で OK を返して終わる。
 ## 分からない入力と、実行に失敗したアクションは、理由を表示して入力待ちに戻る（ターンは進まない）。
-## step() が失敗したら、そのエラーコードを返して終わる（理由は表示済み。ターンは進まないので、入力待ちには戻らず終わる）。
+## advance_turn() が失敗したら、そのエラーコードを返して終わる（理由は表示済み。ターンは進まないので、入力待ちには戻らず終わる）。
 func run() -> Error:
 	_io.write_line("Enter で次のターンに進む。q で終わる。")
 	_write_menu()
@@ -43,7 +43,7 @@ func run() -> Error:
 		if _io.is_eof() or input == QUIT_INPUT:
 			return OK
 		if input.is_empty():
-			var code := _model.step()
+			var code := _model.advance_turn()
 			if code != OK:
 				# get_stock() は成功すると last_error を空にするので、先に取っておく。
 				var message := _model.last_error

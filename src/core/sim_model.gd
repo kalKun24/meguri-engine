@@ -19,6 +19,8 @@ var _names: Dictionary = {}
 var _actions: Dictionary = {}
 var _turn: int = 0
 var _validated: bool = true
+var _seed: int = 0
+var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 
 ## ストックを定義する。成功すると OK を返し、last_error を空にする。
@@ -109,6 +111,30 @@ func validate() -> Error:
 		flow["program"] = compiled.program
 	_validated = true
 	return _succeed()
+
+
+## ゲームの1ターンの単位。いまは step() を呼ぶだけで、戻り値と失敗時の扱いも step() と同じである。
+## テキスト版（TextPlayer）と自動実行（AutoRunner）は、step() ではなくこの関数を呼ぶ。
+## 終了判定（#35）とイベント（#34）は、この関数の中に足す。
+func advance_turn() -> Error:
+	return step()
+
+
+## 乱数の種を決める。以後、get_rng() の乱数列は、同じ種なら同じになる。種を決めないときの種は 0 である。
+## 乱数を使う処理（#34 から）は、グローバルの randi() や randf() ではなく、get_rng() を使う。
+func set_seed(seed_value: int) -> void:
+	_seed = seed_value
+	_rng.seed = seed_value
+
+
+## 直近の set_seed() で決めた種を返す。実行の記録に残すために使う。
+func get_seed() -> int:
+	return _seed
+
+
+## このモデルの乱数の持ち主を返す。種は set_seed() で決める。
+func get_rng() -> RandomNumberGenerator:
+	return _rng
 
 
 ## 1ターン進める。すべてのフローの量を更新前の値から求め、ストックに一斉に反映する。
