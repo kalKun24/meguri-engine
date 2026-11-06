@@ -9,6 +9,10 @@ signal turn_finished(turn: int)
 ## apply_action() が成功し、効果をすべて反映した後に発火する。action_name は実行したアクションの名前である。
 signal action_applied(action_name: String)
 
+## advance_turn() が成功したターンの最後に、勝利か敗北の条件が成り立ってゲームが終わったとき、turn_finished の後に1回だけ発火する。
+## outcome は GameResult.OUTCOME_VICTORY か OUTCOME_DEFEAT、condition_name は決め手の条件の名前、turn は終わったターン番号である。
+signal game_ended(outcome: String, condition_name: String, turn: int)
+
 ## 直近の定義・取得で起きたエラーの説明。エラーが無ければ空である。
 var last_error: String = ""
 
@@ -17,6 +21,11 @@ var _flows: Array[Dictionary] = []
 var _constants: Dictionary = {}
 var _names: Dictionary = {}
 var _actions: Dictionary = {}
+## 勝利・敗北の条件。定義順に {name, outcome, expression, root} を持つ。
+var _conditions: Array[Dictionary] = []
+## 勝利と敗北が同じターンに成り立ったときに採る側。
+var _priority: String = GameResult.OUTCOME_DEFEAT
+var _result: GameResult = GameResult.new()
 var _turn: int = 0
 var _validated: bool = true
 var _seed: int = 0
@@ -280,6 +289,22 @@ func apply_action(action_name: String) -> Error:
 	return OK
 
 
+## 勝利の条件を定義する。expression は式の文字列で、advance_turn() が成功したターンの最後に評価し、0 以外なら成り立つ。
+## 式からは、定義済みのストックと定数を参照できる。そのため、使うストックと定数を定義した後に定義する。
+## 成功すると OK を返し、last_error を空にする。失敗のとき、モデルは変わらない。
+## ERR_INVALID_PARAMETER：名前が空または長すぎる。ERR_PARSE_ERROR：式に構文エラーがある。ERR_INVALID_DATA：式が未定義の名前や許可されていない関数を使っている。
+## ERR_OUT_OF_MEMORY：定義の個数が上限（ModelCheck.MAX_DEFINITIONS）に達している。
+## ERR_ALREADY_EXISTS：同名の定義（ストック・定数・フロー・アクション・条件）がある、または式で使える関数と同名である。
+## 条件の名前は、ストックなどと同じ名前空間にあり、個数の上限も共有する。
+func add_victory_condition(condition_name: String, expression: String) -> Error:
+	return _add_condition(condition_name, expression, GameResult.OUTCOME_VICTORY, "勝利条件")
+
+
+## 敗北の条件を定義する。引数・エラーは add_victory_condition と同じである。
+func add_defeat_condition(condition_name: String, expression: String) -> Error:
+	return _add_condition(condition_name, expression, GameResult.OUTCOME_DEFEAT, "敗北条件")
+
+
 ## アクションが定義されているかを返す。
 func has_action(action_name: String) -> bool:
 	return _actions.has(action_name)
@@ -291,6 +316,18 @@ func get_action_names() -> Array[String]:
 	for action_name: String in _actions:
 		result.append(action_name)
 	return result
+
+
+func _add_condition(condition_name: String, expression: String, outcome: String, what: String) -> Error:
+	var error := _check_new_name(condition_name, "%s名" % what)
+	if error != OK:
+		return error
+	var parsed := _parse_checked(expression, "%s「%s」の式" % [what, ModelCheck.escape(condition_name)])
+	if parsed["error"] != OK:
+		return parsed["error"]
+	_names[condition_name] = true
+	_conditions.append({"name": condition_name, "outcome": outcome, "expression": expression, "root": parsed["root"]})
+	return _succeed()
 
 
 ## 式をパースして名前を検査する。{"error": Error, "root": ExprNode} を返す。失敗なら last_error を設定済みで、root は null である。
@@ -335,6 +372,17 @@ func has_stock(stock_name: String) -> bool:
 ## 定数の値を SimValue で返す。形とエラーは get_stock と同じである。
 func get_constant(constant_name: String) -> SimValue:
 	return _lookup(_constants, constant_name, "定数")
+
+
+## ゲームの結果を GameResult で返す。種類（GameResult.OUTCOME_VICTORY・OUTCOME_DEFEAT・OUTCOME_PENDING）、決め手の条件の名前、終わったターン番号を持つ。
+## まだ終わっていないときは、種類が OUTCOME_PENDING、名前が空、ターンが 0 である。呼ぶたびに写しを返す。last_error は変えない。
+func get_result() -> GameResult:
+	return GameResult.new(_result.outcome, _result.condition_name, _result.turn)
+
+
+## ゲームが終わっているかを返す。終わった後は、step()・advance_turn()・apply_action() が ERR_LOCKED を返す。
+func is_ended() -> bool:
+	return _result.is_ended()
 
 
 ## 現在のターン番号を返す。初期状態は 0 である。
