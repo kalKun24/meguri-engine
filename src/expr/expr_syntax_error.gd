@@ -1,4 +1,4 @@
-## 式の構文エラーである。式の全文、文字位置、原因の説明を持つ。
+## 式の構文エラーである。式の全文（保持用。エラー文には抜粋だけを出す）、文字位置、原因の説明を持つ。
 class_name ExprSyntaxError
 extends RefCounted
 
@@ -16,12 +16,18 @@ func _init(p_source: String = "", p_position: int = 0, p_message: String = "") -
 	message = p_message
 
 
-## 人が読む形にする。1行目に位置と原因、続けて式の全文と、位置を示す ^ を出す。
-## 式の全文と原因は、見えない文字を \u{XXXX} にしてから出す（ModelCheck.escape）。^ は、エスケープ後の式の中で、position の文字の下に来る。
+## 人が読む形にする。1行目に位置と原因、2行目に式の抜粋、3行目に位置を示す ^ を出す。
+## 式は、先頭から ModelCheck.MAX_EXPRESSION_EXCERPT_LENGTH 文字（エスケープ後）までを抜粋し、超えた分は「...」にする。
+## 位置が抜粋の外にあるとき、^ の行は出さない。位置は1行目の数字で分かる。
+## 式の抜粋と原因は、見えない文字を \u{XXXX} にしてから出す。^ は、エスケープ後の抜粋の中で、position の文字の下に来る。
 ## 原因（message）は、生成時にエスケープ済みの文でもよい。バックスラッシュは二重にしない。
+## 出力全体は ModelCheck.MAX_LAST_ERROR_LENGTH 文字に収まる。
 func format() -> String:
-	var clamped: int = clampi(position, 0, source.length())
-	var offset: int = ModelCheck.escape(source.substr(0, clamped), 0).length()
-	return "構文エラー（位置 %d）：%s\n  %s\n  %s^" % [
-		position, ModelCheck.escape(message, 0, false), ModelCheck.escape(source, 0), " ".repeat(offset)
-	]
+	var excerpt: Dictionary = ModelCheck.expression_excerpt(source, position)
+	var text: String = "構文エラー（位置 %d）：%s\n  %s" % [position, ModelCheck.escape_reason(message), excerpt["text"]]
+	var offset: int = excerpt["offset"]
+	if offset >= 0:
+		text += "\n  %s^" % " ".repeat(offset)
+	return text
+
+

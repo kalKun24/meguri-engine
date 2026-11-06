@@ -307,7 +307,7 @@ func test_runtime_errors_for_modulo_sqrt_and_overflow_name_the_cause() -> void:
 		model.add_flow_expr("f", "", "out", expression)
 		assert_int(model.step()).is_not_equal(OK)
 		assert_str(model.last_error).contains(cases[expression])
-		assert_str(model.last_error).contains(expression)
+		assert_str(model.last_error).contains(ModelCheck.escape_expression(expression))
 		assert_str(model.last_error).contains("ターン 1")
 		assert_int(model.get_turn()).is_equal(0)
 		assert_float(model.get_stock("out").value).is_equal(0.0)

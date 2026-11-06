@@ -74,7 +74,7 @@ func add_flow(flow_name: String, source: String, sink: String, amount: float) ->
 
 ## 量を式で書いたフローを定義する。引数の意味は add_flow と同じで、amount の代わりに式の文字列を渡す。
 ## 式からは、ストックと定数を名前で参照でき、許可された関数（ExprFunctions）を呼べる。更新前の値で評価される。
-## ここでは構文だけを検証する。ERR_PARSE_ERROR：構文エラー（last_error に式の全文・位置・原因が入る）。
+## ここでは構文だけを検証する。ERR_PARSE_ERROR：構文エラー（last_error に式の抜粋・位置・原因が入る）。
 ## 名前の解決と引数の数の検証は、validate() が最初の step() の前にまとめて行う。
 ## そのほかのエラーは add_flow と同じである。失敗のとき、モデルは変わらない。
 func add_flow_expr(flow_name: String, source: String, sink: String, expression: String) -> Error:
@@ -84,7 +84,7 @@ func add_flow_expr(flow_name: String, source: String, sink: String, expression: 
 	var parsed: ExprParseResult = ExprParser.new().parse(expression)
 	if not parsed.ok:
 		return _fail(ERR_PARSE_ERROR, "フロー「%s」の式に構文エラーがある（位置 %d）：%s 式：%s" % [
-			ModelCheck.escape(flow_name), parsed.error.position, ModelCheck.escape(parsed.error.message, 0, false), ModelCheck.escape(expression, 0)
+			ModelCheck.escape(flow_name), parsed.error.position, ModelCheck.escape_reason(parsed.error.message), ModelCheck.escape_expression(expression)
 		])
 	_names[flow_name] = true
 	_flows.append({"name": flow_name, "source": source, "sink": sink, "amount": 0.0, "expression": expression, "root": parsed.root, "program": null})
@@ -94,7 +94,7 @@ func add_flow_expr(flow_name: String, source: String, sink: String, expression: 
 
 ## 式のフローを組み立てる。すべての式について、名前の解決（ストックと定数だけを参照できる）、許可関数の検査、引数の数の検査を行う。
 ## 成功すると OK を返し、last_error を空にする。誤りがあれば ERR_INVALID_DATA を返し、
-## last_error に、フロー名・式の全文・文字位置・原因を入れる。
+## last_error に、フロー名・式の抜粋（ModelCheck.MAX_EXPRESSION_EXCERPT_LENGTH 文字まで）・文字位置・原因を入れる。
 ## step() は、組み立てが済んでいなければ最初に自分で呼ぶ。定義を足した後は、次の step() でもう一度行う。
 func validate() -> Error:
 	for flow: Dictionary in _flows:
@@ -104,7 +104,7 @@ func validate() -> Error:
 		if not compiled.ok:
 			flow["program"] = null
 			return _fail(ERR_INVALID_DATA, "フロー「%s」の式に誤りがある（位置 %d）：%s 式：%s" % [
-				ModelCheck.escape(flow["name"]), compiled.error.position, ModelCheck.escape(compiled.error.message, 0, false), ModelCheck.escape(flow["expression"], 0)
+				ModelCheck.escape(flow["name"]), compiled.error.position, ModelCheck.escape_reason(compiled.error.message), ModelCheck.escape_expression(flow["expression"])
 			])
 		flow["program"] = compiled.program
 	_validated = true
@@ -115,7 +115,7 @@ func validate() -> Error:
 ## 成功すると OK を返し、last_error を空にして、turn_finished を発火する。
 ## 組み立てが済んでいなければ、先に validate() を行い、失敗ならそのエラーを返す。
 ## 実行時エラー（0 除算、式やストックの値が NaN・無限大になる）では FAILED を返し、last_error に
-## ターン番号（これから進めるターン）、フロー名、式の全文、原因の演算を入れる。
+## ターン番号（これから進めるターン）、フロー名、式の抜粋、原因の演算を入れる。
 ## このとき、ストックは1つも更新せず、ターン番号も進めず、turn_finished も発火しない。
 func step() -> Error:
 	if not _validated:
@@ -131,7 +131,7 @@ func step() -> Error:
 			var evaluated: ExprEvalResult = ExprEvaluator.evaluate(program, _stocks)
 			if not evaluated.ok:
 				return _fail(FAILED, "ターン %d の実行時エラー：フロー「%s」の式の位置 %d で、%s 式：%s" % [
-					turn, ModelCheck.escape(flow["name"]), evaluated.position, ModelCheck.escape(evaluated.message, 0, false), ModelCheck.escape(flow["expression"], 0)
+					turn, ModelCheck.escape(flow["name"]), evaluated.position, ModelCheck.escape_reason(evaluated.message), ModelCheck.escape_expression(flow["expression"])
 				])
 			amount = evaluated.value
 		if flow["source"] != "":
@@ -163,7 +163,7 @@ func step() -> Error:
 ## 成功すると OK を返し、last_error を空にする。失敗のとき、モデルは変わらない。
 ## ERR_INVALID_PARAMETER：名前が空または長すぎる、effects が空、個数が ModelCheck.MAX_ACTION_EFFECTS を超える、
 ## 効果が文字列でない、「対象名 = 式」の形でない、対象が存在しない、同じ対象が2回出る。
-## ERR_PARSE_ERROR：条件または効果の式に構文エラーがある（last_error に式の全文・位置・原因が入る）。
+## ERR_PARSE_ERROR：条件または効果の式に構文エラーがある（last_error に式の抜粋・位置・原因が入る）。
 ## ERR_INVALID_DATA：式が未定義の名前や許可されていない関数を使っている。
 ## ERR_OUT_OF_MEMORY：定義の個数が上限（ModelCheck.MAX_DEFINITIONS）に達している。
 ## ERR_ALREADY_EXISTS：同名の定義（ストック・定数・フロー・アクション）がある、または式で使える関数と同名である。
@@ -190,7 +190,7 @@ func add_action(action_name: String, condition: String, effects: Array) -> Error
 		var effect_text: String = effect
 		var equals: int = effect_text.find("=")
 		if equals < 0:
-			return _fail(ERR_INVALID_PARAMETER, "アクション「%s」の効果が「対象名 = 式」の形でない：%s" % [escaped, ModelCheck.escape(effect_text, 0)])
+			return _fail(ERR_INVALID_PARAMETER, "アクション「%s」の効果が「対象名 = 式」の形でない：%s" % [escaped, ModelCheck.escape_expression(effect_text)])
 		var target: String = effect_text.substr(0, equals).strip_edges()
 		var expression: String = effect_text.substr(equals + 1)
 		if not _stocks.has(target) and not _constants.has(target):
@@ -212,7 +212,7 @@ func add_action(action_name: String, condition: String, effects: Array) -> Error
 ## 効果の式はすべて、実行前の値で評価する。反映は全体が成功するか、全体が取り消されるかのどちらかである。
 ## 成功すると OK を返し、last_error を空にして、action_applied を発火する。
 ## ERR_INVALID_PARAMETER：名前が空である。ERR_DOES_NOT_EXIST：未定義のアクションである。
-## ERR_UNAVAILABLE：実行条件を満たさない（last_error に条件の全文が入る）。
+## ERR_UNAVAILABLE：実行条件を満たさない（last_error に条件の抜粋が入る）。
 ## FAILED：条件や効果の式の評価で、0 除算や、NaN・無限大が生じた（last_error に原因が入る）。
 ## 失敗のとき、ストックも定数もターン番号も変わらず、action_applied も発火しない。
 func apply_action(action_name: String) -> Error:
@@ -225,10 +225,10 @@ func apply_action(action_name: String) -> Error:
 	var evaluated := _evaluate_now(action["condition_root"], action["condition"])
 	if not evaluated.ok:
 		return _fail(FAILED, "アクション「%s」の条件を評価できない（位置 %d）：%s 条件：%s" % [
-			escaped, evaluated.position, ModelCheck.escape(evaluated.message, 0, false), ModelCheck.escape(action["condition"], 0)
+			escaped, evaluated.position, ModelCheck.escape_reason(evaluated.message), ModelCheck.escape_expression(action["condition"])
 		])
 	if evaluated.value == 0.0:
-		return _fail(ERR_UNAVAILABLE, "アクション「%s」を実行できない。条件を満たさない：%s" % [escaped, ModelCheck.escape(action["condition"], 0)])
+		return _fail(ERR_UNAVAILABLE, "アクション「%s」を実行できない。条件を満たさない：%s" % [escaped, ModelCheck.escape_expression(action["condition"])])
 	# 先にすべての効果を評価し、1つでも失敗したら何も反映しない。
 	var new_values: Dictionary = {}
 	for effect: Dictionary in action["effects"]:
@@ -236,7 +236,7 @@ func apply_action(action_name: String) -> Error:
 		var target: String = effect["target"]
 		if not evaluated.ok:
 			return _fail(FAILED, "アクション「%s」の効果「%s」を評価できない（位置 %d）：%s 式：%s" % [
-				escaped, ModelCheck.escape(target), evaluated.position, ModelCheck.escape(evaluated.message, 0, false), ModelCheck.escape(effect["expression"], 0)
+				escaped, ModelCheck.escape(target), evaluated.position, ModelCheck.escape_reason(evaluated.message), ModelCheck.escape_expression(effect["expression"])
 			])
 		var problem := ModelCheck.check_finite(evaluated.value, "アクション「%s」の効果「%s」の値" % [escaped, ModelCheck.escape(target)])
 		if not problem.is_empty():
@@ -272,13 +272,13 @@ func _parse_checked(expression: String, label: String) -> Dictionary:
 	var parsed: ExprParseResult = ExprParser.new().parse(expression)
 	if not parsed.ok:
 		return {"error": _fail(ERR_PARSE_ERROR, "%sに構文エラーがある（位置 %d）：%s 式：%s" % [
-			label, parsed.error.position, ModelCheck.escape(parsed.error.message, 0, false), ModelCheck.escape(expression, 0)
+			label, parsed.error.position, ModelCheck.escape_reason(parsed.error.message), ModelCheck.escape_expression(expression)
 		]), "root": null}
 	# 名前の解決と関数の検査を、定義時の状態で行う。
 	var compiled: ExprCompileResult = ExprCompiler.compile(parsed.root, expression, _stocks, _constants)
 	if not compiled.ok:
 		return {"error": _fail(ERR_INVALID_DATA, "%sに誤りがある（位置 %d）：%s 式：%s" % [
-			label, compiled.error.position, ModelCheck.escape(compiled.error.message, 0, false), ModelCheck.escape(expression, 0)
+			label, compiled.error.position, ModelCheck.escape_reason(compiled.error.message), ModelCheck.escape_expression(expression)
 		]), "root": null}
 	return {"error": OK, "root": parsed.root}
 
@@ -370,5 +370,5 @@ func _succeed() -> Error:
 
 
 func _fail(code: Error, message: String) -> Error:
-	last_error = message
+	last_error = ModelCheck.limit_last_error(message)
 	return code
