@@ -73,7 +73,7 @@ func next_token() -> ExprToken:
 		"?", ":":
 			return _error("%s は使えない。条件式は、まだ扱わない" % c)
 		_:
-			return _error("使えない文字 '%s' がある" % c)
+			return _error("使えない文字 '%s' がある" % ModelCheck.escape(c, 0))
 
 
 func _simple(type: ExprToken.Type, length: int) -> ExprToken:

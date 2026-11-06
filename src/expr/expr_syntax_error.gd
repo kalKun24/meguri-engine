@@ -17,5 +17,11 @@ func _init(p_source: String = "", p_position: int = 0, p_message: String = "") -
 
 
 ## 人が読む形にする。1行目に位置と原因、続けて式の全文と、位置を示す ^ を出す。
+## 式の全文と原因は、見えない文字を \u{XXXX} にしてから出す（ModelCheck.escape）。^ は、エスケープ後の式の中で、position の文字の下に来る。
+## 原因（message）は、生成時にエスケープ済みの文でもよい。バックスラッシュは二重にしない。
 func format() -> String:
-	return "構文エラー（位置 %d）：%s\n  %s\n  %s^" % [position, message, source, " ".repeat(position)]
+	var clamped: int = clampi(position, 0, source.length())
+	var offset: int = ModelCheck.escape(source.substr(0, clamped), 0).length()
+	return "構文エラー（位置 %d）：%s\n  %s\n  %s^" % [
+		position, ModelCheck.escape(message, 0, false), ModelCheck.escape(source, 0), " ".repeat(offset)
+	]
