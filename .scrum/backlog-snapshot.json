@@ -1,4 +1,4 @@
-{"updated_at": "2026-11-07T21:41:28+09:00", "items": [
+{"updated_at": "2026-11-07T21:45:27+09:00", "items": [
   {"id": "#34", "title": "条件付きのイベントを定義し、シード付きの乱数で判定する", "status": "ready", "points": 5, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/34"},
   {"id": "#37", "title": "ゲーム終了後の凍結と、終了条件の組み立ての使い回し", "status": "ready", "points": 5, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/37"},
   {"id": "#41", "title": "モデル全体の命令数に上限を置き、組み立て直しを依存するものだけにする", "status": "new", "points": null, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/41"},
