@@ -66,7 +66,7 @@ static func _resolve_name(program: ExprProgram, node: ExprNode, stocks: Dictiona
 		program.emit(ExprProgram.Op.PUSH_STOCK, node.position, 0.0, node.name)
 		return ""
 	if constants.has(node.name):
-		program.emit(ExprProgram.Op.PUSH_NUMBER, node.position, constants[node.name])
+		program.emit(ExprProgram.Op.PUSH_NUMBER, node.position, constants[node.name], node.name)
 		return ""
 	if auxiliaries.has(node.name):
 		program.emit(ExprProgram.Op.PUSH_AUXILIARY, node.position, 0.0, node.name)
