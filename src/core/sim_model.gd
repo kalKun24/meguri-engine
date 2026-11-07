@@ -19,6 +19,12 @@ var last_error: String = ""
 var _stocks: Dictionary = {}
 var _flows: Array[Dictionary] = []
 var _constants: Dictionary = {}
+## 補助変数。定義順に {name, expression, root, program, dependencies} を持つ。program と dependencies は validate() が作る。
+var _auxiliaries: Array[Dictionary] = []
+## 補助変数を求める順（_auxiliaries の添字）。依存される側が先に来る。validate() が作る。
+var _auxiliary_order: Array[int] = []
+## ストック名 -> StockRange。範囲を設定したストックだけを持つ。
+var _ranges: Dictionary = {}
 var _names: Dictionary = {}
 var _actions: Dictionary = {}
 ## 勝利・敗北の条件。定義順に {name, outcome, expression, root} を持つ。
@@ -33,26 +39,42 @@ var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 
 ## ストックを定義する。成功すると OK を返し、last_error を空にする。
+## stock_range は値の範囲（StockRange）である。null なら制限が無い（下限が無いストックは負の値をとれ、上限が無いストックは際限なく増える）。
+## 範囲は、ここで設定した後に変えられない。範囲を設定したストックは、step() と advance_turn() が更新後の値を範囲内に収める。
 ## 名前が空、または ModelCheck.MAX_NAME_LENGTH（64 文字）を超える、初期値が NaN・無限大のときは ERR_INVALID_PARAMETER を返す。
+## 名前は式から参照されるので、式の名前と同じ規則（半角英数字と _ だけ。先頭は数字にしない。前後の空白も不可）を守る。違反も ERR_INVALID_PARAMETER である。
+## 表示に使う名前（日本語など）は、モデルとは別に持つ。
+## 範囲が、下限が上限より大きい、下限か上限が NaN・無限大、初期値が範囲外、扱いが未知のときも ERR_INVALID_PARAMETER を返す。
 ## 定義の個数が ModelCheck.MAX_DEFINITIONS（1000 個。ストック・定数・フローの合計）に達していると ERR_OUT_OF_MEMORY を返す。
 ## 同名の定義がある、または式で使える関数（min など）と同名だと ERR_ALREADY_EXISTS を返す。失敗のとき、モデルは変わらない。
-func add_stock(stock_name: String, initial_value: float) -> Error:
-	var error := _check_new_name(stock_name, "ストック名")
+func add_stock(stock_name: String, initial_value: float, stock_range: StockRange = null) -> Error:
+	var error := _check_new_name(stock_name, "ストック名", true)
 	if error != OK:
 		return error
-	var problem := ModelCheck.check_finite(initial_value, "ストック「%s」の初期値" % ModelCheck.escape(stock_name))
+	var label := "ストック「%s」" % ModelCheck.escape(stock_name)
+	var problem := ModelCheck.check_finite(initial_value, "%sの初期値" % label)
 	if not problem.is_empty():
 		return _fail(ERR_INVALID_PARAMETER, problem)
+	if stock_range != null:
+		problem = _check_range(stock_range, initial_value, label)
+		if not problem.is_empty():
+			return _fail(ERR_INVALID_PARAMETER, problem)
+		_ranges[stock_name] = stock_range
 	_names[stock_name] = true
 	_stocks[stock_name] = initial_value
 	_validated = false
 	return _succeed()
 
 
+## ストックの範囲を返す。範囲を設定していないストック、未定義の名前では null を返す。last_error は変えない。
+func get_stock_range(stock_name: String) -> StockRange:
+	return _ranges.get(stock_name, null)
+
+
 ## 定数を定義する。成功すると OK を返し、last_error を空にする。
-## エラーの条件は add_stock と同じである（値が NaN・無限大のときも ERR_INVALID_PARAMETER）。
+## エラーの条件は add_stock と同じである（値が NaN・無限大のときも ERR_INVALID_PARAMETER。名前の規則も同じ）。
 func add_constant(constant_name: String, value: float) -> Error:
-	var error := _check_new_name(constant_name, "定数名")
+	var error := _check_new_name(constant_name, "定数名", true)
 	if error != OK:
 		return error
 	var problem := ModelCheck.check_finite(value, "定数「%s」の値" % ModelCheck.escape(constant_name))
@@ -67,7 +89,7 @@ func add_constant(constant_name: String, value: float) -> Error:
 ## フローを定義する。source は流出元、sink は流入先のストック名で、片方は空文字でもよい。amount は毎ターン同じ量である。
 ## 量を式で書くときは add_flow_expr を使う。
 ## 成功すると OK を返し、last_error を空にする。
-## ERR_INVALID_PARAMETER：フロー名が空または長すぎる、amount が NaN・無限大、存在しないストックを指す、流出元と流入先の両方が空。
+## ERR_INVALID_PARAMETER：フロー名が空・長すぎる・名前の規則（add_stock を参照）に反する、amount が NaN・無限大、存在しないストックを指す、流出元と流入先の両方が空。
 ## ERR_OUT_OF_MEMORY：定義の個数が上限（ModelCheck.MAX_DEFINITIONS）に達している。
 ## ERR_ALREADY_EXISTS：同名の定義がある、または式で使える関数と同名である。
 func add_flow(flow_name: String, source: String, sink: String, amount: float) -> Error:
@@ -83,8 +105,31 @@ func add_flow(flow_name: String, source: String, sink: String, amount: float) ->
 	return _succeed()
 
 
+## 補助変数を定義する。「1人あたりの食料」のような途中の値に名前を付け、フローの式や他の補助変数の式から名前で参照するために使う。
+## 値は、ターンの開始時（更新前）に、依存の順で1度だけ求める。定義の順は結果に影響しない。
+## 式からは、ストック・定数・他の補助変数を名前で参照でき、許可された関数（ExprFunctions）を呼べる。フローの量は参照できない。
+## 参照できる補助変数は、フローの式と補助変数の式だけである。アクションの式と終了条件の式は、ターンの合間や最後に評価するので参照できない。
+## 名前は、ストック・定数・フロー・許可関数と同じ名前空間にあり、重複は ERR_ALREADY_EXISTS になる。名前の規則は add_stock と同じである。
+## ここでは名前の検査と構文だけを検証する。ERR_PARSE_ERROR：構文エラー。ERR_INVALID_PARAMETER：名前の誤り。ERR_OUT_OF_MEMORY：定義の個数が上限に達している。
+## 名前の解決、フローの量を参照していないこと、循環参照が無いことは、validate() が最初の step() の前にまとめて検査する。
+## 成功すると OK を返し、last_error を空にする。失敗のとき、モデルは変わらない。
+func add_auxiliary(auxiliary_name: String, expression: String) -> Error:
+	var error := _check_new_name(auxiliary_name, "補助変数名", true)
+	if error != OK:
+		return error
+	var parsed: ExprParseResult = ExprParser.new().parse(expression)
+	if not parsed.ok:
+		return _fail(ERR_PARSE_ERROR, "補助変数「%s」の式に構文エラーがある（位置 %d）：%s 式：%s" % [
+			ModelCheck.escape(auxiliary_name), parsed.error.position, ModelCheck.escape_reason(parsed.error.message), ModelCheck.escape_expression(expression)
+		])
+	_names[auxiliary_name] = true
+	_auxiliaries.append({"name": auxiliary_name, "expression": expression, "root": parsed.root, "program": null, "dependencies": [] as Array[int]})
+	_validated = false
+	return _succeed()
+
+
 ## 量を式で書いたフローを定義する。引数の意味は add_flow と同じで、amount の代わりに式の文字列を渡す。
-## 式からは、ストックと定数を名前で参照でき、許可された関数（ExprFunctions）を呼べる。更新前の値で評価される。
+## 式からは、ストック・定数・補助変数を名前で参照でき、許可された関数（ExprFunctions）を呼べる。更新前の値で評価される。
 ## ここでは構文だけを検証する。ERR_PARSE_ERROR：構文エラー（last_error に式の抜粋・位置・原因が入る）。
 ## 名前の解決と引数の数の検証は、validate() が最初の step() の前にまとめて行う。
 ## そのほかのエラーは add_flow と同じである。失敗のとき、モデルは変わらない。
@@ -103,15 +148,27 @@ func add_flow_expr(flow_name: String, source: String, sink: String, expression: 
 	return _succeed()
 
 
-## 式のフローを組み立てる。すべての式について、名前の解決（ストックと定数だけを参照できる）、許可関数の検査、引数の数の検査を行う。
+## 補助変数と式のフローを組み立てる。すべての式について、名前の解決（ストック・定数・補助変数を参照できる。補助変数はフローを参照できない）、
+## 許可関数の検査、引数の数の検査を行い、補助変数の循環参照を探して、補助変数を求める順を決める。
 ## 成功すると OK を返し、last_error を空にする。誤りがあれば ERR_INVALID_DATA を返し、
-## last_error に、フロー名・式の抜粋（ModelCheck.MAX_EXPRESSION_EXCERPT_LENGTH 文字まで）・文字位置・原因を入れる。
+## last_error に、補助変数名かフロー名・式の抜粋（ModelCheck.MAX_EXPRESSION_EXCERPT_LENGTH 文字まで）・文字位置・原因を入れる。
+## 循環参照のときは、循環の経路（例：a -> b -> a）を入れる。経路は、先頭から ModelCheck.MAX_CYCLE_PATH_LENGTH 個の名前までを示し、残りは「...」で省く。
+## 循環の検出と順序の計算は、再帰を使わない。
 ## step() は、組み立てが済んでいなければ最初に自分で呼ぶ。定義を足した後は、次の step() でもう一度行う。
 func validate() -> Error:
+	var auxiliary_names: Dictionary = {}
+	for auxiliary: Dictionary in _auxiliaries:
+		auxiliary_names[auxiliary["name"]] = true
+	var flow_names: Dictionary = {}
+	for flow: Dictionary in _flows:
+		flow_names[flow["name"]] = true
+	var auxiliary_error := _compile_auxiliaries(auxiliary_names, flow_names)
+	if auxiliary_error != OK:
+		return auxiliary_error
 	for flow: Dictionary in _flows:
 		if flow["expression"] == "":
 			continue
-		var compiled: ExprCompileResult = ExprCompiler.compile(flow["root"], flow["expression"], _stocks, _constants)
+		var compiled: ExprCompileResult = ExprCompiler.compile(flow["root"], flow["expression"], _stocks, _constants, auxiliary_names)
 		if not compiled.ok:
 			flow["program"] = null
 			return _fail(ERR_INVALID_DATA, "フロー「%s」の式に誤りがある（位置 %d）：%s 式：%s" % [
@@ -120,6 +177,78 @@ func validate() -> Error:
 		flow["program"] = compiled.program
 	_validated = true
 	return _succeed()
+
+
+## 補助変数の式を組み立て、依存の順を決める。誤りがあれば last_error を設定して ERR_INVALID_DATA を返す。
+func _compile_auxiliaries(auxiliary_names: Dictionary, flow_names: Dictionary) -> Error:
+	_auxiliary_order = []
+	var index_of: Dictionary = {}
+	for i in _auxiliaries.size():
+		index_of[_auxiliaries[i]["name"]] = i
+	for auxiliary: Dictionary in _auxiliaries:
+		var compiled: ExprCompileResult = ExprCompiler.compile(auxiliary["root"], auxiliary["expression"], _stocks, _constants, auxiliary_names, flow_names)
+		if not compiled.ok:
+			auxiliary["program"] = null
+			return _fail(ERR_INVALID_DATA, "補助変数「%s」の式に誤りがある（位置 %d）：%s 式：%s" % [
+				ModelCheck.escape(auxiliary["name"]), compiled.error.position, ModelCheck.escape_reason(compiled.error.message), ModelCheck.escape_expression(auxiliary["expression"])
+			])
+		auxiliary["program"] = compiled.program
+		# 依存先は、命令列の中の補助変数の参照から、重複なしで集める。
+		var dependencies: Array[int] = []
+		var seen: Dictionary = {}
+		var program: ExprProgram = compiled.program
+		for i in program.ops.size():
+			if program.ops[i] == ExprProgram.Op.PUSH_AUXILIARY and not seen.has(program.names[i]):
+				seen[program.names[i]] = true
+				dependencies.append(index_of[program.names[i]])
+		auxiliary["dependencies"] = dependencies
+	return _order_auxiliaries()
+
+
+## 補助変数を依存の順に並べて _auxiliary_order に入れる。循環があれば、経路を含む last_error を設定して ERR_INVALID_DATA を返す。
+## 深さ優先の探索を、再帰ではなく明示的なスタックで行う。長さ1000の鎖でも呼び出しの深さは増えない。
+func _order_auxiliaries() -> Error:
+	# 0：未訪問、1：探索中（スタックの上）、2：完了。
+	var state: PackedInt32Array = PackedInt32Array()
+	state.resize(_auxiliaries.size())
+	var order: Array[int] = []
+	for start in _auxiliaries.size():
+		if state[start] != 0:
+			continue
+		state[start] = 1
+		var path: Array[int] = [start]
+		var cursors: Array[int] = [0]
+		while not path.is_empty():
+			var top: int = path[path.size() - 1]
+			var cursor: int = cursors[cursors.size() - 1]
+			var dependencies: Array[int] = _auxiliaries[top]["dependencies"]
+			if cursor < dependencies.size():
+				cursors[cursors.size() - 1] = cursor + 1
+				var next: int = dependencies[cursor]
+				if state[next] == 1:
+					return _fail(ERR_INVALID_DATA, "補助変数に循環参照がある：%s" % _format_cycle(path.slice(path.find(next)), next))
+				if state[next] == 0:
+					state[next] = 1
+					path.append(next)
+					cursors.append(0)
+			else:
+				state[top] = 2
+				order.append(top)
+				path.pop_back()
+				cursors.pop_back()
+	_auxiliary_order = order
+	return OK
+
+
+## 循環の経路を「a -> b -> a」の形にする。名前が ModelCheck.MAX_CYCLE_PATH_LENGTH を超えるときは、先頭からその数だけ示して「...」で省く。
+func _format_cycle(cycle: Array[int], closing: int) -> String:
+	var names: Array[String] = []
+	for index in cycle:
+		names.append(ModelCheck.escape(_auxiliaries[index]["name"]))
+	names.append(ModelCheck.escape(_auxiliaries[closing]["name"]))
+	if names.size() <= ModelCheck.MAX_CYCLE_PATH_LENGTH:
+		return " -> ".join(names)
+	return " -> ".join(names.slice(0, ModelCheck.MAX_CYCLE_PATH_LENGTH)) + " -> ..."
 
 
 ## ゲームの1ターンの単位。テキスト版（TextPlayer）と自動実行（AutoRunner）は、step() ではなくこの関数を呼ぶ。
@@ -197,12 +326,16 @@ func _apply_flows() -> Error:
 		if validation != OK:
 			return validation
 	var turn: int = _turn + 1
+	var calculated := _calculate_auxiliaries(turn)
+	if calculated["error"] != OK:
+		return calculated["error"]
+	var auxiliary_values: Dictionary = calculated["values"]
 	var deltas: Dictionary = {}
 	for flow: Dictionary in _flows:
 		var amount: float = flow["amount"]
 		var program: ExprProgram = flow["program"]
 		if program != null:
-			var evaluated: ExprEvalResult = ExprEvaluator.evaluate(program, _stocks)
+			var evaluated: ExprEvalResult = ExprEvaluator.evaluate(program, _stocks, auxiliary_values)
 			if not evaluated.ok:
 				return _fail(FAILED, "ターン %d の実行時エラー：フロー「%s」の式の位置 %d で、%s 式：%s" % [
 					turn, ModelCheck.escape(flow["name"]), evaluated.position, ModelCheck.escape_reason(evaluated.message), ModelCheck.escape_expression(flow["expression"])
@@ -216,6 +349,10 @@ func _apply_flows() -> Error:
 	var updated: Dictionary = {}
 	for stock_name: String in deltas:
 		var new_value: float = _stocks[stock_name] + deltas[stock_name]
+		# 同じターンの流入と流出を合計した後で、範囲内に収める。削った量はどこにも流れずに消える。
+		var stock_range: StockRange = _ranges.get(stock_name, null)
+		if stock_range != null:
+			new_value = stock_range.apply(new_value)
 		var problem := ModelCheck.check_finite(new_value, "ストック「%s」の更新後の値" % ModelCheck.escape(stock_name))
 		if not problem.is_empty():
 			return _fail(FAILED, "ターン %d の実行時エラー：%s" % [turn, problem])
@@ -224,6 +361,22 @@ func _apply_flows() -> Error:
 		_stocks[stock_name] = updated[stock_name]
 	_turn = turn
 	return OK
+
+
+## 補助変数を、ターンの開始時（更新前）のストックから、依存の順に1度だけ求める。ストックなどは変えない。
+## 返す Dictionary は "error"（Error）と "values"（補助変数名をキーにした辞書）を持つ。
+## 値が非有限になる、0 で割るなどで求められないときは、補助変数の名前を含む last_error を設定して FAILED を返す。
+func _calculate_auxiliaries(turn: int) -> Dictionary:
+	var values: Dictionary = {}
+	for index in _auxiliary_order:
+		var auxiliary: Dictionary = _auxiliaries[index]
+		var evaluated: ExprEvalResult = ExprEvaluator.evaluate(auxiliary["program"], _stocks, values)
+		if not evaluated.ok:
+			return {"error": _fail(FAILED, "ターン %d の実行時エラー：補助変数「%s」の式の位置 %d で、%s 式：%s" % [
+				turn, ModelCheck.escape(auxiliary["name"]), evaluated.position, ModelCheck.escape_reason(evaluated.message), ModelCheck.escape_expression(auxiliary["expression"])
+			]), "values": {}}
+		values[auxiliary["name"]] = evaluated.value
+	return {"error": OK, "values": values}
 
 
 ## 終了判定。すべての条件を定義順に評価し（1つでも評価に失敗したら、そこで失敗を返す）、決め手を選ぶ。
@@ -525,8 +678,9 @@ func _lookup(table: Dictionary, key: String, what: String) -> SimValue:
 
 
 ## 新しい定義の名前を検査する。問題が無ければ OK を返す（last_error は変えない）。
-func _check_new_name(name_value: String, what: String) -> Error:
-	var problem := ModelCheck.check_name(name_value, what)
+## identifier が true のときは、式の名前と同じ規則（半角英数字と _、先頭は数字にしない）も適用する。式から参照される定義（ストック・定数・フロー）に使う。
+func _check_new_name(name_value: String, what: String, identifier: bool = false) -> Error:
+	var problem := ModelCheck.check_identifier(name_value, what) if identifier else ModelCheck.check_name(name_value, what)
 	if not problem.is_empty():
 		return _fail(ERR_INVALID_PARAMETER, problem)
 	if _names.size() >= ModelCheck.MAX_DEFINITIONS:
@@ -538,9 +692,32 @@ func _check_new_name(name_value: String, what: String) -> Error:
 	return OK
 
 
+## 範囲の設定を検査する。問題が無ければ空文字を返す。
+func _check_range(stock_range: StockRange, initial_value: float, label: String) -> String:
+	if stock_range.get_overflow() != StockRange.Overflow.CLAMP:
+		return "%sの範囲の扱いが未知である：%d" % [label, stock_range.get_overflow()]
+	var has_lower: bool = stock_range.has_lower()
+	var has_upper: bool = stock_range.has_upper()
+	if has_lower:
+		var problem := ModelCheck.check_finite(stock_range.get_lower(), "%sの下限" % label)
+		if not problem.is_empty():
+			return problem
+	if has_upper:
+		var problem := ModelCheck.check_finite(stock_range.get_upper(), "%sの上限" % label)
+		if not problem.is_empty():
+			return problem
+	if has_lower and has_upper and stock_range.get_lower() > stock_range.get_upper():
+		return "%sの下限が上限より大きい（下限 %s、上限 %s）" % [label, str(stock_range.get_lower()), str(stock_range.get_upper())]
+	if has_lower and initial_value < stock_range.get_lower():
+		return "%sの初期値が下限を下回る（下限 %s、初期値 %s）" % [label, str(stock_range.get_lower()), str(initial_value)]
+	if has_upper and initial_value > stock_range.get_upper():
+		return "%sの初期値が上限を上回る（上限 %s、初期値 %s）" % [label, str(stock_range.get_upper()), str(initial_value)]
+	return ""
+
+
 ## 新しいフローの名前と、流出元・流入先を検査する。問題が無ければ OK を返す。
 func _check_new_flow(flow_name: String, source: String, sink: String) -> Error:
-	var error := _check_new_name(flow_name, "フロー名")
+	var error := _check_new_name(flow_name, "フロー名", true)
 	if error != OK:
 		return error
 	var escaped := ModelCheck.escape(flow_name)

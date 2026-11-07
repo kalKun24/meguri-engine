@@ -70,16 +70,28 @@ func test_town_stays_sane_for_12_turns() -> void:
 
 
 # 食料が不足する設定では、死亡のフローが増える。
+# 死亡のフロー量は、人口の変化（出生 - 死亡）から逆算し、式から求めた期待値と直接比べる。
 func test_deaths_grow_when_food_is_short() -> void:
+	var params: Dictionary = TownModel.DEFAULT_PARAMS
+	var population: float = params["population"]
+	var births: float = population * params["birth_rate"]
+	for food: float in [10.0, 0.0, 10000.0]:
+		var model := TownModel.new().build({"food": food})
+		assert_int(model.step()).is_equal(OK)
+		var actual_deaths: float = population + births - model.get_stock("population").value
+		# deaths = population * death_rate + starvation_rate * max(0, population * ration - food)
+		var shortage: float = max(0.0, population * params["ration"] - food)
+		var expected_deaths: float = population * params["death_rate"] + params["starvation_rate"] * shortage
+		assert_float(actual_deaths) \
+			.override_failure_message("food=%s の死亡のフロー量が式の期待値とずれた（期待 %s、実際 %s）" % [food, expected_deaths, actual_deaths]) \
+			.is_equal_approx(expected_deaths, 1e-9)
+	# 不足があるときの死亡は、不足が無いときより、不足分に比例して増える。
 	var plenty := TownModel.new().build({"food": 10000.0})
 	var short := TownModel.new().build({"food": 10.0})
 	plenty.step()
 	short.step()
-	var plenty_deaths: float = 100.0 - plenty.get_stock("population").value
-	var short_deaths: float = 100.0 - short.get_stock("population").value
-	# 人口の変化 = 出生 - 死亡。出生は同じなので、人口が少ないほうが死亡が多い。
-	assert_float(short.get_stock("population").value).is_less(plenty.get_stock("population").value)
-	assert_float(plenty_deaths).is_not_equal(short_deaths)
+	var extra_deaths: float = plenty.get_stock("population").value - short.get_stock("population").value
+	assert_float(extra_deaths).is_equal_approx(params["starvation_rate"] * (population * params["ration"] - 10.0), 1e-9)
 
 
 # 食料が足りないままでも、12ターン、負にならない。

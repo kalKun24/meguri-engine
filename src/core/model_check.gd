@@ -10,6 +10,8 @@ const MAX_NAME_LENGTH: int = 64
 const MAX_DEFINITIONS: int = 1000
 ## 1つのアクションが持てる効果の最大個数。これを超える定義は拒否する。
 const MAX_ACTION_EFFECTS: int = 50
+## 補助変数の循環参照のエラー文に出す経路の最大の名前の数。超えたら先頭からこの数だけ示し、残りを「...」で省く。
+const MAX_CYCLE_PATH_LENGTH: int = 8
 ## エラー文に名前を出すときの最大長（文字数）。超えた分は「...」で省く。
 const MAX_MESSAGE_NAME_LENGTH: int = 32
 ## エラー文に式（条件・効果の式、アクションの効果の文を含む）を出すときの抜粋の最大長。
@@ -32,6 +34,36 @@ static func check_name(name_value: String, what: String = "名前") -> String:
 	if name_value.length() > MAX_NAME_LENGTH:
 		return "%sが長すぎる（上限 %d 文字、実際 %d 文字）：%s" % [what, MAX_NAME_LENGTH, name_value.length(), escape(name_value)]
 	return ""
+
+
+## 式の名前と、ストック・定数・フロー・補助変数の定義の名前に共通の規則を、利用者に示す文。式の字句解析と check_identifier が使う。
+const NAME_RULE_HINT: String = "名前は半角英数字と _ だけで書く（先頭は数字にできない）"
+
+
+## 定義の名前（ストック・定数・フロー、補助変数）を検査する。check_name の検査に加えて、式の名前と同じ規則を適用する。
+## 規則：半角英数字（A-Z・a-z・0-9）と _ だけで書く。先頭は数字にできない。前後の空白も使えない。
+## 問題が無ければ空文字を、あれば直し方を含む理由を返す。表示に使う名前（日本語など）は、モデルとは別に持つ。
+static func check_identifier(name_value: String, what: String = "名前") -> String:
+	var problem: String = check_name(name_value, what)
+	if not problem.is_empty():
+		return problem
+	for i in name_value.length():
+		var code: int = name_value.unicode_at(i)
+		if not is_name_char(code):
+			return "%sに使えない文字がある（位置 %d：'%s'）。%s" % [what, i, escape(name_value[i]), NAME_RULE_HINT]
+		if i == 0 and not is_name_start(code):
+			return "%sの先頭に数字は置けない（位置 0：'%s'）。%s" % [what, escape(name_value[i]), NAME_RULE_HINT]
+	return ""
+
+
+## コードポイントが、名前の先頭に置ける文字（半角英字と _）かを返す。
+static func is_name_start(code: int) -> bool:
+	return (code >= 0x61 and code <= 0x7A) or (code >= 0x41 and code <= 0x5A) or code == 0x5F
+
+
+## コードポイントが、名前の2文字目以降に置ける文字（半角英数字と _）かを返す。
+static func is_name_char(code: int) -> bool:
+	return is_name_start(code) or (code >= 0x30 and code <= 0x39)
 
 
 ## 空、または U+0020 とエスケープ対象の文字（needs_escape）だけからなる文字列かを返す。空の名前として扱う（T2-1）。
@@ -104,25 +136,38 @@ static func expression_excerpt(text: String, position: int) -> Dictionary:
 
 
 ## escape_excerpt の本体。position は text の中の文字位置で、不要なら -1 を渡す。
+## escape_backslash が false のとき、text はエスケープ済みの文として扱い、「\\」と「\u{XXXX}」を1単位として切る（limit_escaped と同じ規則）。
+## 単位の途中の position は、その単位の先頭の位置として返す。
 static func excerpt_at(text: String, position: int, limit: int, escape_backslash: bool) -> Dictionary:
 	var pieces := PackedStringArray()
 	var total: int = 0
 	var offset: int = -1
 	var truncated: bool = false
-	for i in text.length():
-		var piece: String = _escape_char(text.unicode_at(i), text[i], escape_backslash)
+	var i: int = 0
+	while i < text.length():
+		var step: int = 1
+		var piece: String
+		if escape_backslash:
+			piece = _escape_char(text.unicode_at(i), text[i], true)
+		else:
+			step = _escaped_unit_length(text, i)
+			if step > 1:
+				piece = text.substr(i, step)
+			else:
+				piece = _escape_char(text.unicode_at(i), text[i], false)
 		if total + piece.length() > limit:
 			truncated = true
 			break
-		if i == position:
+		if position >= i and position < i + step:
 			offset = total
 		pieces.append(piece)
 		total += piece.length()
+		i += step
 	if not truncated:
 		if position >= text.length():
 			offset = total
 		return {"text": "".join(pieces), "offset": offset}
-	# 「...」の分を空けるために、末尾の文字を1文字ずつ省く。
+	# 「...」の分を空けるために、末尾の単位を1つずつ省く。
 	while total + 3 > limit and not pieces.is_empty():
 		total -= pieces[pieces.size() - 1].length()
 		pieces.remove_at(pieces.size() - 1)
@@ -140,18 +185,25 @@ static func limit_escaped(text: String, limit: int) -> String:
 	var cut: int = limit - 3
 	var i: int = 0
 	while i < text.length():
-		var step: int = 1
-		if text[i] == "\\" and i + 1 < text.length():
-			if text[i + 1] == "\\":
-				step = 2
-			elif text[i + 1] == "u" and i + 2 < text.length() and text[i + 2] == "{":
-				var close: int = text.find("}", i)
-				if close >= 0:
-					step = close - i + 1
+		var step: int = _escaped_unit_length(text, i)
 		if i + step > cut:
 			break
 		i += step
 	return text.substr(0, i) + "..."
+
+
+## エスケープ済みの文で、位置 i から始まる1単位の長さ（文字数）を返す。
+## 単位は「\\」（2文字）、「\u{XXXX}」（閉じ括弧まで。XXXX は16進数の1〜6桁）、またはそれ以外の1文字である。
+static func _escaped_unit_length(text: String, i: int) -> int:
+	if text[i] != "\\" or i + 1 >= text.length():
+		return 1
+	if text[i + 1] == "\\":
+		return 2
+	if text[i + 1] == "u" and i + 2 < text.length() and text[i + 2] == "{":
+		var close: int = text.find("}", i)
+		if close >= 0 and close - i - 3 >= 1 and close - i - 3 <= 6 and text.substr(i + 3, close - i - 3).is_valid_hex_number():
+			return close - i + 1
+	return 1
 
 
 ## last_error に入れる文を、MAX_LAST_ERROR_LENGTH に収める。
