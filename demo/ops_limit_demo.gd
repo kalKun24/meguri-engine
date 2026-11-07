@@ -10,6 +10,8 @@ func _init() -> void:
 	var ops := _arg("ops", ModelCheck.MAX_TOTAL_OPS)
 	_show_rejection()
 	print("")
+	_measure_actions()
+	print("")
 	print("--- 1ターンの時間（命令数 %d、%d ターン）---" % [ops, turns])
 	_measure("形1 補助変数 100 個×約 1000 命令（式の長さの最大）", _build_auxiliaries(ops, 999), turns, false)
 	_measure("形2 補助変数 1000 個×約 100 命令（定義の個数の最大）", _build_auxiliaries(ops, 99), turns, false)
@@ -97,6 +99,35 @@ func _show_rejection() -> void:
 		error_string(model.add_flow_expr("over_f", "", "s", big)),
 	])
 	print("モデルは変わらない：合計 %d -> %d 命令" % [before, model._total_ops])
+
+
+# 上限いっぱいのアクション（50 効果×各約 1000 字）を並べたときの、定義の時間と静的メモリを測る。
+# 上限が無ければ、1 件あたり約 63 MB・約 0.66 秒を、名前の上限（約 1000 個）まで繰り返せた。
+func _measure_actions() -> void:
+	print("--- アクションの定義の時間とメモリ（50 効果×各約 1000 字）---")
+	var model := _base_model()
+	var effects: Array = []
+	for i in 50:
+		model.add_stock("t%d" % i, 0.0)
+		effects.append("t%d = %s" % [i, _expression(999)])
+	var memory_before := Performance.get_monitor(Performance.MEMORY_STATIC)
+	var started := Time.get_ticks_usec()
+	var accepted := 0
+	var code := OK
+	var rejected_usec := 0
+	while accepted < 990:
+		var each_started := Time.get_ticks_usec()
+		code = model.add_action("act%d" % accepted, "1", effects)
+		if code != OK:
+			rejected_usec = Time.get_ticks_usec() - each_started
+			break
+		accepted += 1
+	var elapsed := Time.get_ticks_usec() - started
+	var memory_after := Performance.get_monitor(Performance.MEMORY_STATIC)
+	print("受け付けたアクション %d 個（合計 %d 命令、上限 %d）、次の結果：%s" % [accepted, model._total_ops, ModelCheck.MAX_TOTAL_OPS, error_string(code)])
+	print("last_error：%s" % model.last_error)
+	print("定義の合計時間：%.2f 秒（拒否の 1 回は %.2f 秒）" % [elapsed / 1000000.0, rejected_usec / 1000000.0])
+	print("静的メモリの増加：%.1f MB" % ((memory_after - memory_before) / 1048576.0))
 
 
 func _measure(label: String, model: SimModel, turns: int, change_constant: bool) -> void:
