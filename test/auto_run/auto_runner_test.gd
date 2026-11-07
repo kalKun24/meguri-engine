@@ -52,6 +52,21 @@ func test_seed_is_passed_and_recorded() -> void:
 	assert_int(AutoRunner.new().run(_model(), 1).seed).is_equal(0)
 
 
+## 渡されたモデルが既に終わっていると、set_seed() が ERR_LOCKED を返す。種を決められないまま回さず、何も実行せずに Error にする。
+func test_ended_model_is_rejected_because_seed_cannot_be_set() -> void:
+	var model := _model(CountingModel.new()) as CountingModel
+	model.add_victory_condition("win", "A <= 7")
+	assert_int(model.advance_turn()).is_equal(OK)
+	assert_bool(model.is_ended()).is_true()
+	model.advance_calls = 0
+	var result := AutoRunner.new().run(model, 3, 55)
+	assert_int(result.error).is_equal(ERR_LOCKED)
+	assert_str(result.message).contains("ゲームは終了している")
+	assert_int(model.advance_calls).is_equal(0)
+	assert_int(result.rows.size()).is_equal(0)
+	assert_int(model.get_seed()).is_equal(0)
+
+
 ## N は 1 以上 100000 以下。範囲の外は、何も実行せずに Error にする。
 func test_turns_out_of_range_is_rejected_before_running() -> void:
 	for turns: int in [0, -1, AutoRunner.MAX_TURNS + 1, 9223372036854775807, -9223372036854775808]:
