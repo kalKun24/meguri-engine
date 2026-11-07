@@ -494,7 +494,7 @@ func add_action(action_name: String, condition: String, effects: Array) -> Error
 
 ## アクションを実行する。ターンの合間に呼ぶ。効果はすぐストックと定数に反映され、次の step() から効く。
 ## 1ターンに何回でも実行でき、効果の式を毎回、その時点の値で評価する（費用も毎回かかる）。
-## 効果の式はすべて、実行前の値で評価する。反映は全体が成功するか、全体が取り消されるかのどちらかである。
+## 効果の式はすべて、実行前の値で評価する。範囲つきのストックは、反映の直前に範囲内に収める（削った量は消え、成功する）。反映は全体が成功するか、全体が取り消されるかのどちらかである。
 ## 成功すると OK を返し、last_error を空にして、action_applied を発火する。
 ## ERR_INVALID_PARAMETER：名前が空である。ERR_DOES_NOT_EXIST：未定義のアクションである。
 ## ERR_UNAVAILABLE：実行条件を満たさない（last_error に条件の抜粋が入る）。
@@ -532,7 +532,13 @@ func apply_action(action_name: String) -> Error:
 		new_values[target] = evaluated.value
 	for target: String in new_values:
 		if _stocks.has(target):
-			_stocks[target] = new_values[target]
+			var new_value: float = new_values[target]
+			# フローの更新と同じ StockRange.apply で、反映の直前に1回だけ範囲内に収める。削った量は消える。
+			# 範囲の端は有限なので、収めた後の値も有限である（非有限は上の check_finite で拒否済み）。
+			var stock_range: StockRange = _ranges.get(target, null)
+			if stock_range != null:
+				new_value = stock_range.apply(new_value)
+			_stocks[target] = new_value
 		else:
 			_constants[target] = new_values[target]
 			# 式は定数の値を組み立て時に取り込むので、次の step() で組み立て直す。
