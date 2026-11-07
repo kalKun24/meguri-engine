@@ -34,10 +34,12 @@ var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 ## ストックを定義する。成功すると OK を返し、last_error を空にする。
 ## 名前が空、または ModelCheck.MAX_NAME_LENGTH（64 文字）を超える、初期値が NaN・無限大のときは ERR_INVALID_PARAMETER を返す。
+## 名前は式から参照されるので、式の名前と同じ規則（半角英数字と _ だけ。先頭は数字にしない。前後の空白も不可）を守る。違反も ERR_INVALID_PARAMETER である。
+## 表示に使う名前（日本語など）は、モデルとは別に持つ。
 ## 定義の個数が ModelCheck.MAX_DEFINITIONS（1000 個。ストック・定数・フローの合計）に達していると ERR_OUT_OF_MEMORY を返す。
 ## 同名の定義がある、または式で使える関数（min など）と同名だと ERR_ALREADY_EXISTS を返す。失敗のとき、モデルは変わらない。
 func add_stock(stock_name: String, initial_value: float) -> Error:
-	var error := _check_new_name(stock_name, "ストック名")
+	var error := _check_new_name(stock_name, "ストック名", true)
 	if error != OK:
 		return error
 	var problem := ModelCheck.check_finite(initial_value, "ストック「%s」の初期値" % ModelCheck.escape(stock_name))
@@ -50,9 +52,9 @@ func add_stock(stock_name: String, initial_value: float) -> Error:
 
 
 ## 定数を定義する。成功すると OK を返し、last_error を空にする。
-## エラーの条件は add_stock と同じである（値が NaN・無限大のときも ERR_INVALID_PARAMETER）。
+## エラーの条件は add_stock と同じである（値が NaN・無限大のときも ERR_INVALID_PARAMETER。名前の規則も同じ）。
 func add_constant(constant_name: String, value: float) -> Error:
-	var error := _check_new_name(constant_name, "定数名")
+	var error := _check_new_name(constant_name, "定数名", true)
 	if error != OK:
 		return error
 	var problem := ModelCheck.check_finite(value, "定数「%s」の値" % ModelCheck.escape(constant_name))
@@ -67,7 +69,7 @@ func add_constant(constant_name: String, value: float) -> Error:
 ## フローを定義する。source は流出元、sink は流入先のストック名で、片方は空文字でもよい。amount は毎ターン同じ量である。
 ## 量を式で書くときは add_flow_expr を使う。
 ## 成功すると OK を返し、last_error を空にする。
-## ERR_INVALID_PARAMETER：フロー名が空または長すぎる、amount が NaN・無限大、存在しないストックを指す、流出元と流入先の両方が空。
+## ERR_INVALID_PARAMETER：フロー名が空・長すぎる・名前の規則（add_stock を参照）に反する、amount が NaN・無限大、存在しないストックを指す、流出元と流入先の両方が空。
 ## ERR_OUT_OF_MEMORY：定義の個数が上限（ModelCheck.MAX_DEFINITIONS）に達している。
 ## ERR_ALREADY_EXISTS：同名の定義がある、または式で使える関数と同名である。
 func add_flow(flow_name: String, source: String, sink: String, amount: float) -> Error:
@@ -525,8 +527,9 @@ func _lookup(table: Dictionary, key: String, what: String) -> SimValue:
 
 
 ## 新しい定義の名前を検査する。問題が無ければ OK を返す（last_error は変えない）。
-func _check_new_name(name_value: String, what: String) -> Error:
-	var problem := ModelCheck.check_name(name_value, what)
+## identifier が true のときは、式の名前と同じ規則（半角英数字と _、先頭は数字にしない）も適用する。式から参照される定義（ストック・定数・フロー）に使う。
+func _check_new_name(name_value: String, what: String, identifier: bool = false) -> Error:
+	var problem := ModelCheck.check_identifier(name_value, what) if identifier else ModelCheck.check_name(name_value, what)
 	if not problem.is_empty():
 		return _fail(ERR_INVALID_PARAMETER, problem)
 	if _names.size() >= ModelCheck.MAX_DEFINITIONS:
@@ -540,7 +543,7 @@ func _check_new_name(name_value: String, what: String) -> Error:
 
 ## 新しいフローの名前と、流出元・流入先を検査する。問題が無ければ OK を返す。
 func _check_new_flow(flow_name: String, source: String, sink: String) -> Error:
-	var error := _check_new_name(flow_name, "フロー名")
+	var error := _check_new_name(flow_name, "フロー名", true)
 	if error != OK:
 		return error
 	var escaped := ModelCheck.escape(flow_name)
