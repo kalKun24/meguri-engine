@@ -3,7 +3,7 @@
 ##
 ## 文法（優先順位は上が低い）：
 ## [codeblock]
-## comparison := additive ( ("<" | "<=" | ">" | ">=" | "==" | "!=") additive )*   左結合
+## comparison := additive [ ("<" | "<=" | ">" | ">=" | "==" | "!=") additive ]     比較は1つまで
 ## additive   := term ( ("+" | "-") term )*                                         左結合
 ## term       := unary ( ("*" | "/" | "%") unary )*                                 左結合
 ## unary      := "-" unary | primary
@@ -105,14 +105,17 @@ func _is_comparison(type: ExprToken.Type) -> bool:
 
 func _parse_comparison() -> ExprNode:
 	var left: ExprNode = _parse_additive()
-	while _error == null and _is_comparison(_token.type):
-		var op_token: ExprToken = _token
-		_advance()
-		var right: ExprNode = _parse_additive()
-		if _error != null:
-			return null
-		left = ExprNode.make_binary(op_token.text, left, right, op_token.position)
-	return left if _error == null else null
+	if _error != null or not _is_comparison(_token.type):
+		return left if _error == null else null
+	var op_token: ExprToken = _token
+	_advance()
+	var right: ExprNode = _parse_additive()
+	if _error != null:
+		return null
+	# 比較を連ねた式（0 < x < 10）は、2つ目の比較演算子の位置で拒否する。括弧で囲んだ比較は、primary として読むので通る。
+	if _is_comparison(_token.type):
+		return _fail(_token.position, "比較は1つの式に1つまでである。'%s' は2つ目の比較になる。括弧と掛け算で '(0 < x) * (x < 10)' のように書く" % _token.text)
+	return ExprNode.make_binary(op_token.text, left, right, op_token.position)
 
 
 func _parse_additive() -> ExprNode:

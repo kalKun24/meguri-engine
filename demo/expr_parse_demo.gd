@@ -15,6 +15,12 @@ const DEFAULT_EXPRESSIONS: Array[String] = [
 	"(1 + 2",
 	"",
 	"name = \"x\"",
+	"0 < x < 10",
+	"(a < b) < c",
+	"(0 < x) * (x < 10)",
+	"人口 * 0.02",
+	"1e3",
+	"2x",
 ]
 
 

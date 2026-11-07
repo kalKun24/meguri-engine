@@ -73,6 +73,10 @@ func next_token() -> ExprToken:
 		"?", ":":
 			return _error("%s は使えない。条件式は、まだ扱わない" % c)
 		_:
+			var code: int = c.unicode_at(0)
+			# 日本語・全角の英字などは、名前の規則に反する文字である。見えない文字と ASCII の記号は、使えない文字として扱う。
+			if code >= 0x80 and not ModelCheck.needs_escape(code):
+				return _error("'%s' は名前に使えない。%s" % [ModelCheck.escape_expression(c), ModelCheck.NAME_RULE_HINT])
 			return _error("使えない文字 '%s' がある" % ModelCheck.escape_expression(c))
 
 
@@ -104,6 +108,9 @@ func _read_number() -> ExprToken:
 		# 400 桁の数のように、float に収まらないリテラルは拒否する（T1-1）。位置は数の先頭にする。
 		_pos = start
 		return _error("数値リテラルが大きすぎて、有限の数にならない（%d 桁）" % text.length())
+	# 数字の直後の英字・_ は、指数表記（1e3）や数字と名前の連結（2x、0x10、1_000）である。どれも使えない。
+	if _pos < _source.length() and ModelCheck.is_name_start(_source.unicode_at(_pos)):
+		return _error("数字の直後に '%s' がある。指数表記（1e3）や、数字に文字をつなぐ書き方（2x、0x10、1_000）は使えない。1000 や 2 * x のように書く" % _source[_pos])
 	var token := ExprToken.new(ExprToken.Type.NUMBER, text, start)
 	token.number = value
 	return token
@@ -121,8 +128,8 @@ func _is_space(c: String) -> bool:
 
 
 func _is_digit(c: String) -> bool:
-	return c >= "0" and c <= "9"
+	return c.unicode_at(0) >= 0x30 and c.unicode_at(0) <= 0x39
 
 
 func _is_name_start(c: String) -> bool:
-	return (c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or c == "_"
+	return ModelCheck.is_name_start(c.unicode_at(0))

@@ -98,8 +98,8 @@ func test_unary_minus_binds_tighter_than_binary_operators() -> void:
 
 func test_comparison_has_lowest_precedence_and_is_left_associative() -> void:
 	assert_str(_tree("a + 1 < b * 2")).is_equal("(< (+ a 1.0) (* b 2.0))")
-	assert_str(_tree("a < b == c")).is_equal("(== (< a b) c)")
-	assert_str(_tree("a == b != c")).is_equal("(!= (== a b) c)")
+	assert_str(_tree("a < b == c")).is_equal("ERR")
+	assert_str(_tree("a == b != c")).is_equal("ERR")
 	assert_str(_tree("-a >= -b")).is_equal("(>= (neg a) (neg b))")
 
 
