@@ -1,5 +1,5 @@
 # Sprint 6
-- phase: execution
+- phase: review
 - goal: スプリントの終わりに、PO は、ゲームが終わった後はモデルが一切変わらないことと、何千もの条件や巨大な式を持つモデルが上限で拒否されるか現実的な時間で回ることを確かめられる。アクションで範囲の外の値にしようとしても、ストックは範囲に収まる。
 - started: 2026-11-07T21:54:22+09:00
 - base_branch: main
@@ -7,9 +7,9 @@
 ## 対象 PBI
 | PBI | points | ui | 担当構成 | 状態 | 差し戻し | ブランチ | 作業ディレクトリ |
 |---|---|---|---|---|---|---|---|
-| #37 | 5 | no | game-developer → code-reviewer・security-auditor・data-scientist | todo | 0 | | |
-| #39 | 2 | no | game-developer → code-reviewer・security-auditor・data-scientist | todo | 0 | | |
-| #45 | 3 | no | game-developer → code-reviewer・security-auditor | todo | 0 | | |
+| #37 | 5 | no | game-developer → code-reviewer・security-auditor・data-scientist | approved | 0 | scrum/37 | /home/kal24hi/Projects/meguri-engine/.claude/worktrees/agent-aa9cf4f59d7aacd8b |
+| #39 | 2 | no | game-developer → code-reviewer・security-auditor・data-scientist | approved | 0 | scrum/39 | /home/kal24hi/Projects/meguri-engine/.claude/worktrees/agent-ad46157f468b26ff9 |
+| #45 | 3 | no | game-developer → code-reviewer・security-auditor | approved | 1 | scrum/45 | /home/kal24hi/Projects/meguri-engine/.claude/worktrees/agent-a56abb94a16498ac6 |
 
 ## デモ台本
 | # | PO の操作 | 期待する結果 | PBI |
@@ -46,9 +46,108 @@
 ## Agent 実行ログ
 | PBI | Agent | 目的 | tokens | tool_uses | 所要時間 |
 |---|---|---|---|---|---|
+| #39 | game-developer | implement | 63471 | 54 | 507s |
+| #39 | game-developer | rework（経路の表だけ、新規起動） | 32125 | 10 | 36s |
+| #39 | security-auditor | review | 33859 | 12 | 54s |
+| #39 | data-scientist | review | 25528 | 7 | 24s |
+| #39 | code-reviewer | review | 44107 | 13 | 104s |
+| #37 | game-developer | implement | 144741 | 98 | 1078s |
+| #37 | code-reviewer | review | 49327 | 15 | 114s |
+| #37 | data-scientist | review | 37804 | 15 | 115s |
+| #37 | security-auditor | review | 47725 | 20 | 245s |
+| #45 | game-developer | implement | 83988 | 46 | 845s |
+| #45 | code-reviewer | review | 37158 | 16 | 98s |
+| #45 | security-auditor | review | 48826 | 26 | 358s |
+| #45 | game-developer | rework（新規起動） | 49000 | 22 | 354s |
+| #45 | security-auditor | review（再判定、新規起動） | 26990 | 10 | 86s |
+| 統合 | game-developer | demo | 65602 | 28 | 381s |
 
 ## 記録
 - 計画の前のリファインメント（2026-11-07）：#39（2pt）・#40（1pt）・#42（3pt、値を読む関数を含む）・#43（3pt）を ready にした。#41 を #45（3pt）と #46（5pt）に分けた。#12 は PO の保留（#8 の後）のため new のまま残した。見積りの起動は1回（52,875 tokens、15 tool_uses、110秒）で、この表には含めない。
 - PO の選択：#39 は範囲に収める。#41 は分ける。#42 は参照させず値を読めるようにする。#43 は全部入れる。
 - DoD 変更案・チーム編成の変更案は無かった。
 - 飛ばした PBI：#34（5pt）は #37・#45 が先に要る。#46（5pt）は容量を超える。
+
+### #39 implement の報告
+- 原文：/home/kal24hi/Projects/meguri-engine/.scrum/sprints/sprint-6-reports/39-implement.md
+- status: done。コミット1つ（全基準が apply_action の同じ1箇所の変更）。テスト 450 件、ERROR は既知の2行だけ。ガードを外すと、範囲を使う8件のテストが落ちることを確かめた。
+- 経路の表の列1〜7を、実装者が独自に解釈して書いた（入力・検証・反映…）。原因は、スクラムマスターの共通の依頼のファイルが「T5-1」と名前だけを書き、列の定義を載せていなかったことである。
+  - 対応：共通の依頼のファイルに列の定義を書き足した。#39 の表は、新しい Agent にコードを変えずに作り直させる（T5-2）。差し戻しには数えない。
+  - 振り返りの材料：合意の名前だけを依頼に書くと、Agent は合意のファイルを読まずに解釈することがある。
+- 経路の表の作り直し（新規起動、T5-2）：32,125 tokens、10 tool_uses。implement の初回 63,471 の約51%だった。表は報告の原文の末尾に足した。作り直しの Agent は、報告の原文のファイルを保存する前に起動したため、差分と既存のコードだけから書いた。
+  - 気づいた点：apply_action 側に範囲の端の有限性の再確認が無い（add_stock に依存）。行Aの最悪の形の実測が無い。範囲つきの効果と失敗する効果が同じアクションにあるときの全体取り消しのテストが無い。
+- レビュー：code と security を起動した。extra は、#37 の implement が動いているため（同時に3つまで）、枠が空いてから起動する。
+
+### #39 レビュー
+- security：approve。must 0、新規の should 0。作り直しの表の A〜D に値を流した（+1000、-1000、NaN、INF、1e308 相当、境界の ±微小量、-0.0、範囲つきの効果と失敗する効果の組（3通り）、互いを参照する2つのストック）。部分反映は無く、評価は実行前の値で、収めるのは反映時の1回だけだった。
+  - 補足：失敗の後に get_stock を呼ぶと last_error が空に戻る（既存の振る舞い。実装の問題ではない）。
+- extra を起動した。
+- extra：approve。must 0、新規の should 2件（どちらも対応不要）。差分とテストを読んで確かめた。収めるのは反映の直前の1回だけ、フローの更新と同じ扱い、町のゴールデン値の経路は不変、決定的である。
+  - should：「実行前の値で評価する」のテストは、評価と反映の順を入れ替えたときにしか落ちない → 対応不要（実装の構造で保たれる）
+  - should：境界ちょうどの値の効果のテストが無い → 対応不要（StockRange 側のテストで担う）
+- code：approve。must 0、新規の should 5件。テスト 450 件を再実行した。作り直しの表は T5-1 の定義どおりで空欄が無いことを確かめた。
+  - should：範囲つきの効果と失敗する効果が同じアクションにあるときの全体取り消しのテストが無い → #28 にコメントした
+  - should：demo/action_range_demo.gd.uid がコミットされていない → 統合で足す
+  - should：行A の列7で3軸を明示していない → 対応不要（処理量が増えない PBI）
+  - should：範囲の端の有限性は add_stock に依存する → 対応不要（NaN は既知 #8）
+  - should：test_defeat_judgement_sees_clamped_value のコメントが条件と食い違う → 統合で直す
+- 判定：3枠すべて approve で approved にした。差し戻し0回（経路の表の作り直しは差し戻しに数えない）。
+
+### #37 implement の報告
+- 原文：/home/kal24hi/Projects/meguri-engine/.scrum/sprints/sprint-6-reports/37-implement.md
+- status: done。コミット3つ（67a66de 測定のデモ、e6c37a5 基準1・2、bf24868 基準3・4）。テスト 470 件、ERROR は既知の2行だけ。凍結の guard を1つずつ外すと、対応するテストが10関数すべてで落ちることを確かめた。
+- 列挙表：凍結の11関数（add_auxiliary を含む）。関数が増えると落ちるテストを置いた。
+- 列7：形A（定数が変わらない）は2ターン目以降 4.2秒 → 1.3秒。形B（毎ターン定数が変わる）は変わらず約4.5秒。implement が「上限なし」を自分で報告した（→ #45・#46）。T5-1 の手順どおりである。
+- assumptions：add_auxiliary も凍結の対象にした（本文の一覧に無い）。終了後の validate は ERR_LOCKED。set_seed の呼び出し元は AutoRunner の1か所で、OK でなければ止まる。
+- レビュー：code・security・extra の3つを起動した。#45 は、#37 の判定が出てから scrum/37 の上で起動する。
+
+### #37 レビュー
+- code：approve。must 0、新規の should 4件（ほかに既知 #46 が1件）。テスト 470 件を再実行した。列挙のコマンドを自分でも実行し、11件が表と一致した。
+  - 判断：add_auxiliary を凍結に足したのは妥当（列挙の基準に含まれる）。set_seed の戻り値の変更は、呼び出し元が AutoRunner の1か所だけで、問題なし。「上限なし」は T5-1 の定めどおり should で、この PBI の must ではない。
+  - should：条件の命令数にモデル全体の上限が無い → #45 の受け入れ基準
+  - should：組み立てに失敗した条件の program が null になり、前後の条件で新旧が混ざる（実害は無い）→ #45 の受け入れ基準（null の program を数えるときの扱い）
+  - should：add_auxiliary を凍結に足したことが本文の一覧と食い違う → 対応不要（スプリントレビューで PO に示す）
+  - should：テスト用の private の数え方が本番コードにある → 対応不要
+- extra：approve。must 0、新規の should 1件（ほかに既知 #45・#46）。テスト 470 件を再実行した。判定の時点・順序・優先・取り消しは変わらず、組み立ての入力も同じなので、#35 の決定性と CSV の最終行は変わらない。set_seed は戻り値だけの変更で、乱数列は変わらない。町のゴールデン値の経路も不変である。
+  - should：変更前の1000文字の測定は2ターンだけでばらつきが大きい → 対応不要（761文字の行で足りる）
+- security：approve。must 0、新規の should 0（「上限なし」は既知 #45・#46）。凍結をすり抜ける経路を実際に試した（受け手の中から7関数、get_result の書き換え、get_stock_range、get_rng の seed（既知 #34））。列7は 990条件×1000文字の形Bで約5.9秒。式の中身・ストック数・評価時の失敗の再試行の軸を試し、導いた最悪の形を超える軸は無かった。
+- 判定：3枠すべて approve で approved にした。差し戻し0回。
+- should の行き先（T1-2）：命令数の上限と、組み立てに失敗した条件の null の扱い → #45 の依頼に入れた。add_auxiliary の凍結 → スプリントレビューで PO に示す。
+- #45 の implement を、scrum/37 の上で起動した。
+
+### #45 implement の報告
+- 原文：/home/kal24hi/Projects/meguri-engine/.scrum/sprints/sprint-6-reports/45-implement.md
+- status: done。コミット2つ（ff99f33 基準1、04fca11 基準2）。テスト 482 件、ERROR は既知の2行だけ。guard を外すとテストが落ちることを確かめた。
+- 上限は MAX_TOTAL_OPS = 100000。数えるのは定義時の構文木の節の数で、組み立てた命令数と一致する。null の program の有無に依らない。
+- 列7：上限いっぱいの5つの形で、最悪は約0.58秒/ターン（変更前の5.9秒の約1/10）。積は上限で止まる。
+- unresolved（自分で報告した should）：アクションの式は合計に入れていない。1回の apply_action は最大約5.1万命令で有界だが、呼ぶ回数に上限は無い。
+- レビュー：code と security を起動した（extra は不要、実行計画のとおり）。
+
+### #45 レビュー
+- code：approve。must 0、新規の should 1件（ほかに既知 #46）。テスト 482 件を再実行した。列挙のコマンドを自分でも実行し、式を台帳に積む3か所すべてで数えていることを確かめた。数え方は節の数で組み立ての命令数と一致し、null の program ですり抜けることは無い。validate に検査を置かない判断、アクションの式を合計に含めない判断は妥当である。
+  - should：アクションの式は合計に入らず、呼ぶ回数に上限が無い（implement の自己申告と同じ）→ 新規改善 PBI（PO の判断）
+- security：request-changes。must 1、新規の should 2件（対応不要）、既知 #46 が1件。数え方と組み立ての一致、上限の境界（99900 → 101個目で拒否、ちょうど100000は通る）、単項・関数・括弧の数え漏れが無いことを実際に流して確かめた。
+  - must：アクションの式が合計の上限に入らない。50効果×各1000字のアクションで、1件あたり約63MBの静的メモリと約0.66秒の定義時間を実測した。アクション数は名前の上限1000まで増やせるので、約60GB・約10分に達しうる（外挿）。報告の「1回の評価が有界だから足りる」は、保存量と定義時間を見ていなかった。
+  - should：apply_action の評価時間（1回約0.25秒）は、呼ぶ回数が呼び出し側の制御なので対応不要。1000字の式の構文解析（約13ms）は有界で対応不要。
+- 判定：差し戻し1回。受け入れ基準3で「既存の上限では足りない」と分かったので、アクションの式も同じ合計に入れる手直しにした（スクラムマスターの判断。スプリントレビューで PO に示す）。code の should（アクションの式が合計に入らない）も、この手直しで解消する。
+- 手直しは、T5-2 に従い新しい Agent を既存の作業ディレクトリで起動した。
+- 振り返りの材料：T5-1 の列7で、implement は「保存される量（メモリ）と定義時間」の軸を見ていなかった。3軸は処理時間の積だけを問い、定義時に保存される量を問うていない。
+- 手直し（新規起動、T5-2）：4b61cad。add_action でも条件と全効果の命令数を数えて上限にかけた。テスト 488 件、ERROR は既知の2行だけ。50効果×各999字のアクションは2個まで受け付け、3個目を拒否した。静的メモリの増加は 125.5 MB で止まった（修正前は外挿で約60GB）。49,000 tokens で、implement の初回 83,988 の約58%だった（T5-2 の目安の半分以下には届かなかった）。
+- 再レビュー：security を新規に起動した（must と差分だけ）。
+- security の再判定（新規起動、T5-2）：approve。must は解消した。50効果×約500字のアクションを120件足して、4件目で拒否、拒否の後に状態とメモリが変わらないことを確かめた。26,990 tokens で、security の初回 48,826 の約55%だった。
+  - should：上限を超えた後も、拒否される呼び出しごとに全文をパースする（1回約0.4〜0.76秒）→ 新規改善 PBI
+- 判定：approved（差し戻し1回）。
+- should の行き先（T1-2）：アクションを呼ぶ回数に上限が無い（code）と、拒否の前の安価な検査（security・implement）→ 新規改善 PBI #47（new、priority:5）にまとめた。毎ターン定数が変わる形の約0.58秒 → 既知 #46。
+
+### 実行フェーズの終了
+- 3件すべてが approved になった（差し戻しは #45 の1回）。blocked は0件。
+- このスプリントで作った改善 PBI：#47。コメントした PBI：#28。
+- T5-2 の材料：新規起動の手直し・再判定は、初回の51%（#39 の表）、58%（#45 の手直し）、55%（#45 の再判定）で、元の Agent を再開した S5（96,875、初回より多い再判定）より下がったが、どれも半分以下には届かなかった。
+- phase を demo にした。
+
+### デモの準備
+- 統合ブランチ：scrum/sprint-6。作業ディレクトリ：/home/kal24hi/Projects/meguri-engine/.claude/worktrees/sprint-6。取り込みの順：scrum/37 → 45 → 39。競合は無かった（T5-3 は判定不能）。
+- 統合ブランチに df1c172（#39 の demo の uid、テストのコメントの修正）を足した。統合後のテストは 501 件、ERROR は既知の2行だけ。
+- デモ：/home/kal24hi/Projects/meguri-engine/.scrum/demos/sprint-6/（README.md、demo.sh、rehearsal.md）。回：1。
+- リハーサル：1度目の通しで4場面すべてが一致した。場面1の「同じモデルで変更の前後を並べる」は、#45 の上限で990個×761文字のモデルが作れなくなったため、変更前は報告の値、変更後は上限に収まる形で示した（注記つきで一致）。
+- phase を review にした。
