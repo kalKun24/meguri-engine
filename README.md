@@ -247,6 +247,8 @@ var result: GameResult = model.get_result()  # outcome は "victory"・"defeat"�
 - `set_seed()` は `Error` を返す。成功すると `OK` を返して `last_error` を空にし、終わった後は `ERR_LOCKED` を返して種を変えない。
 - 条件の式の評価に失敗したら（0 除算、NaN・無限大）、そのターン全体（ストック・定数・ターン番号・乱数の状態）を取り消し、`FAILED` を返す。ゲームは終わらない。判定では、成り立つ条件が先に見つかっても、すべての条件を評価する。
 - テキスト版（`TextPlayer`）は、ゲームが終わると結果を表示して終わる。
+- 条件の式は `validate()` で一度だけ組み立て、組み立てた命令列を条件ごとに持つ。ストック・定数・条件を足したとき、アクションが定数を変えたときだけ、次の `advance_turn()` で組み立て直す。組み立ての回数はターン数に比例しない。
+- `demo/freeze_demo.gd` は、ゲームが終わった後にモデルを変える関数を順に呼び、すべて `ERR_LOCKED` で状態が変わらないことを見せる（`godot --headless --path . -s res://demo/freeze_demo.gd`）。`demo/condition_perf_demo.gd` は、条件990個×761文字のモデルで1ターンの時間を測る（`godot --headless --path . -s res://demo/condition_perf_demo.gd -- --turns=3`）。
 
 ## CI
 

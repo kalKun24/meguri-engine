@@ -28,8 +28,10 @@ var _auxiliary_order: Array[int] = []
 var _ranges: Dictionary = {}
 var _names: Dictionary = {}
 var _actions: Dictionary = {}
-## 勝利・敗北の条件。定義順に {name, outcome, expression, root} を持つ。
+## 勝利・敗北の条件。定義順に {name, outcome, expression, root, program} を持つ。program は validate() が作る命令列である。
 var _conditions: Array[Dictionary] = []
+## 条件の式を組み立てた回数（ExprCompiler.compile の呼び出し数）。組み立てがターン数に比例しないことを、テストで確かめるために数える。
+var _condition_build_count: int = 0
 ## 勝利と敗北が同じターンに成り立ったときに採る側。
 var _priority: String = GameResult.OUTCOME_DEFEAT
 var _result: GameResult = GameResult.new()
@@ -194,8 +196,33 @@ func validate() -> Error:
 				ModelCheck.escape(flow["name"]), compiled.error.position, ModelCheck.escape_reason(compiled.error.message), ModelCheck.escape_expression(flow["expression"])
 			])
 		flow["program"] = compiled.program
+	var condition_error := _compile_conditions()
+	if condition_error != OK:
+		return condition_error
 	_validated = true
 	return _succeed()
+
+
+## 勝利・敗北の条件の式を組み立てて、結果の命令列を条件の "program" に持たせる。_judge() は毎ターン、これを評価するだけである。
+## 組み立ては validate() の中で行い、_validated が false の間（定義が増えた、定数が変わった）だけやり直す。補助変数とフローの式と同じ仕組みである。
+## 条件の式からは、ストックと定数だけを参照できる（補助変数とフローの量は参照できない）。
+## 誤りがあれば last_error を設定して ERR_INVALID_DATA を返す。
+func _compile_conditions() -> Error:
+	for condition: Dictionary in _conditions:
+		_condition_build_count += 1
+		var compiled: ExprCompileResult = ExprCompiler.compile(condition["root"], condition["expression"], _stocks, _constants)
+		if not compiled.ok:
+			condition["program"] = null
+			return _fail(ERR_INVALID_DATA, "%sの式に誤りがある（位置 %d）：%s 式：%s" % [
+				_condition_label(condition), compiled.error.position, ModelCheck.escape_reason(compiled.error.message), ModelCheck.escape_expression(condition["expression"])
+			])
+		condition["program"] = compiled.program
+	return OK
+
+
+## エラー文に使う条件の呼び名（例：勝利条件「name」）を返す。名前はエスケープする。
+func _condition_label(condition: Dictionary) -> String:
+	return "%s「%s」" % ["勝利条件" if condition["outcome"] == GameResult.OUTCOME_VICTORY else "敗北条件", ModelCheck.escape(condition["name"])]
 
 
 ## 補助変数の式を組み立て、依存の順を決める。誤りがあれば last_error を設定して ERR_INVALID_DATA を返す。
@@ -411,8 +438,9 @@ func _judge(turn: int) -> Dictionary:
 	var first_defeat: String = ""
 	for condition: Dictionary in _conditions:
 		var condition_name: String = condition["name"]
-		var label := "%s「%s」" % ["勝利条件" if condition["outcome"] == GameResult.OUTCOME_VICTORY else "敗北条件", ModelCheck.escape(condition_name)]
-		var evaluated := _evaluate_now(condition["root"], condition["expression"])
+		var label := _condition_label(condition)
+		# 組み立て済みの命令列を評価するだけである。組み立ては validate() が行う（advance_turn() は流れの前に済ませている）。
+		var evaluated: ExprEvalResult = ExprEvaluator.evaluate(condition["program"], _stocks)
 		if not evaluated.ok:
 			verdict["error"] = _fail(FAILED, "ターン %d の終了判定でエラー（ターンは取り消した）：%sの式の位置 %d で、%s 式：%s" % [
 				turn, label, evaluated.position, ModelCheck.escape_reason(evaluated.message), ModelCheck.escape_expression(condition["expression"])
@@ -626,7 +654,8 @@ func _add_condition(condition_name: String, expression: String, outcome: String,
 	if parsed["error"] != OK:
 		return parsed["error"]
 	_names[condition_name] = true
-	_conditions.append({"name": condition_name, "outcome": outcome, "expression": expression, "root": parsed["root"]})
+	_conditions.append({"name": condition_name, "outcome": outcome, "expression": expression, "root": parsed["root"], "program": null})
+	_validated = false
 	return _succeed()
 
 
