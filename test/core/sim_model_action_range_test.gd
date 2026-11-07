@@ -131,7 +131,7 @@ func test_victory_judgement_sees_clamped_value() -> void:
 
 
 func test_defeat_judgement_sees_clamped_value() -> void:
-	# 範囲の外（-950）でも、収めた値（0）でも「food <= 0」は成り立つ。境界で止まった値を見る。
+	# 範囲の外（-950）なら「food < 0」が成り立つ。収めた値（0）では成り立たない。
 	var model := _food_model()
 	model.add_stock("pop", 1.0)
 	model.add_flow("tick", "", "pop", 1.0)
