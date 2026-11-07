@@ -281,14 +281,48 @@ func test_range_cannot_be_changed_after_setting() -> void:
 		assert_bool(model.get_stock_range("a").has_method(method)).is_false()
 
 
-# --- 基準6：更新後の値が範囲内（許容誤差 1e-9）。多数ターン・小数の流量 ---
+# --- 基準6：更新後の値が範囲内。多数ターン・小数の流量で、境界に実際に当てる ---
 
-func test_values_stay_within_range_over_many_turns() -> void:
+## 範囲を使う run を 300 ターン進める。各ターンで範囲内を確かめ、境界に達したターン数を返す。
+## 境界に張り付いた値は apply が返した境界そのものなので、厳密に比べる。許容誤差は範囲の途中の値だけに使う。
+func _run_and_count_boundary_turns(model: SimModel, lower: float, upper: float) -> Dictionary:
+	var counts: Dictionary = {"lower": 0, "upper": 0, "middle": 0}
+	for turn in 300:
+		assert_int(model.advance_turn()).is_equal(OK)
+		var food := _stock(model, "food")
+		if food == lower:
+			counts["lower"] += 1
+		elif food == upper:
+			counts["upper"] += 1
+		else:
+			counts["middle"] += 1
+			assert_float(food).is_between(lower + TOLERANCE, upper - TOLERANCE)
+	return counts
+
+
+func test_values_stick_to_lower_bound_over_many_turns() -> void:
+	# 消費が生産より多く、50 から減って 0 に張り付く。範囲が無ければ負になり続ける。
+	var model := SimModel.new()
+	model.add_stock("food", 50.0, StockRange.between(0.0, 100.0))
+	model.add_stock("pop", 10.0)
+	model.add_flow_expr("harvest", "", "food", "0.3 * pop")
+	model.add_flow_expr("eat", "food", "", "0.1 * food + 0.37 * pop")
+	var counts := _run_and_count_boundary_turns(model, 0.0, 100.0)
+	assert_int(counts["lower"]).is_greater(0)
+	assert_int(counts["upper"]).is_equal(0)
+	assert_int(counts["middle"]).is_greater(0)
+	assert_float(_stock(model, "food")).is_equal(0.0)
+
+
+func test_values_stick_to_upper_bound_over_many_turns() -> void:
+	# 生産が消費より多く、50 から増えて 100 に張り付く。範囲が無ければ増え続ける。
 	var model := SimModel.new()
 	model.add_stock("food", 50.0, StockRange.between(0.0, 100.0))
 	model.add_stock("pop", 10.0)
 	model.add_flow_expr("harvest", "", "food", "0.7 * pop + 3.3")
-	model.add_flow_expr("eat", "food", "", "0.1 * food + 0.37 * pop")
-	for turn in 300:
-		assert_int(model.advance_turn()).is_equal(OK)
-		assert_float(_stock(model, "food")).is_between(0.0 - TOLERANCE, 100.0 + TOLERANCE)
+	model.add_flow_expr("eat", "food", "", "0.01 * food + 0.37 * pop")
+	var counts := _run_and_count_boundary_turns(model, 0.0, 100.0)
+	assert_int(counts["upper"]).is_greater(0)
+	assert_int(counts["lower"]).is_equal(0)
+	assert_int(counts["middle"]).is_greater(0)
+	assert_float(_stock(model, "food")).is_equal(100.0)
