@@ -23,6 +23,8 @@ var _constants: Dictionary = {}
 var _auxiliaries: Array[Dictionary] = []
 ## 補助変数を求める順（_auxiliaries の添字）。依存される側が先に来る。validate() が作る。
 var _auxiliary_order: Array[int] = []
+## ストック名 -> StockRange。範囲を設定したストックだけを持つ。
+var _ranges: Dictionary = {}
 var _names: Dictionary = {}
 var _actions: Dictionary = {}
 ## 勝利・敗北の条件。定義順に {name, outcome, expression, root} を持つ。
@@ -37,22 +39,36 @@ var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 
 ## ストックを定義する。成功すると OK を返し、last_error を空にする。
+## stock_range は値の範囲（StockRange）である。null なら制限が無い（下限が無いストックは負の値をとれ、上限が無いストックは際限なく増える）。
+## 範囲は、ここで設定した後に変えられない。範囲を設定したストックは、step() と advance_turn() が更新後の値を範囲内に収める。
 ## 名前が空、または ModelCheck.MAX_NAME_LENGTH（64 文字）を超える、初期値が NaN・無限大のときは ERR_INVALID_PARAMETER を返す。
 ## 名前は式から参照されるので、式の名前と同じ規則（半角英数字と _ だけ。先頭は数字にしない。前後の空白も不可）を守る。違反も ERR_INVALID_PARAMETER である。
 ## 表示に使う名前（日本語など）は、モデルとは別に持つ。
+## 範囲が、下限が上限より大きい、下限か上限が NaN・無限大、初期値が範囲外、扱いが未知のときも ERR_INVALID_PARAMETER を返す。
 ## 定義の個数が ModelCheck.MAX_DEFINITIONS（1000 個。ストック・定数・フローの合計）に達していると ERR_OUT_OF_MEMORY を返す。
 ## 同名の定義がある、または式で使える関数（min など）と同名だと ERR_ALREADY_EXISTS を返す。失敗のとき、モデルは変わらない。
-func add_stock(stock_name: String, initial_value: float) -> Error:
+func add_stock(stock_name: String, initial_value: float, stock_range: StockRange = null) -> Error:
 	var error := _check_new_name(stock_name, "ストック名", true)
 	if error != OK:
 		return error
-	var problem := ModelCheck.check_finite(initial_value, "ストック「%s」の初期値" % ModelCheck.escape(stock_name))
+	var label := "ストック「%s」" % ModelCheck.escape(stock_name)
+	var problem := ModelCheck.check_finite(initial_value, "%sの初期値" % label)
 	if not problem.is_empty():
 		return _fail(ERR_INVALID_PARAMETER, problem)
+	if stock_range != null:
+		problem = _check_range(stock_range, initial_value, label)
+		if not problem.is_empty():
+			return _fail(ERR_INVALID_PARAMETER, problem)
+		_ranges[stock_name] = stock_range
 	_names[stock_name] = true
 	_stocks[stock_name] = initial_value
 	_validated = false
 	return _succeed()
+
+
+## ストックの範囲を返す。範囲を設定していないストック、未定義の名前では null を返す。last_error は変えない。
+func get_stock_range(stock_name: String) -> StockRange:
+	return _ranges.get(stock_name, null)
 
 
 ## 定数を定義する。成功すると OK を返し、last_error を空にする。
@@ -333,6 +349,10 @@ func _apply_flows() -> Error:
 	var updated: Dictionary = {}
 	for stock_name: String in deltas:
 		var new_value: float = _stocks[stock_name] + deltas[stock_name]
+		# 同じターンの流入と流出を合計した後で、範囲内に収める。削った量はどこにも流れずに消える。
+		var stock_range: StockRange = _ranges.get(stock_name, null)
+		if stock_range != null:
+			new_value = stock_range.apply(new_value)
 		var problem := ModelCheck.check_finite(new_value, "ストック「%s」の更新後の値" % ModelCheck.escape(stock_name))
 		if not problem.is_empty():
 			return _fail(FAILED, "ターン %d の実行時エラー：%s" % [turn, problem])
@@ -670,6 +690,29 @@ func _check_new_name(name_value: String, what: String, identifier: bool = false)
 	if ExprFunctions.is_allowed(name_value):
 		return _fail(ERR_ALREADY_EXISTS, "式で使える関数と同名である：%s" % ModelCheck.escape(name_value))
 	return OK
+
+
+## 範囲の設定を検査する。問題が無ければ空文字を返す。
+func _check_range(stock_range: StockRange, initial_value: float, label: String) -> String:
+	if stock_range.get_overflow() != StockRange.Overflow.CLAMP:
+		return "%sの範囲の扱いが未知である：%d" % [label, stock_range.get_overflow()]
+	var has_lower: bool = stock_range.has_lower()
+	var has_upper: bool = stock_range.has_upper()
+	if has_lower:
+		var problem := ModelCheck.check_finite(stock_range.get_lower(), "%sの下限" % label)
+		if not problem.is_empty():
+			return problem
+	if has_upper:
+		var problem := ModelCheck.check_finite(stock_range.get_upper(), "%sの上限" % label)
+		if not problem.is_empty():
+			return problem
+	if has_lower and has_upper and stock_range.get_lower() > stock_range.get_upper():
+		return "%sの下限が上限より大きい（下限 %s、上限 %s）" % [label, str(stock_range.get_lower()), str(stock_range.get_upper())]
+	if has_lower and initial_value < stock_range.get_lower():
+		return "%sの初期値が下限を下回る（下限 %s、初期値 %s）" % [label, str(stock_range.get_lower()), str(initial_value)]
+	if has_upper and initial_value > stock_range.get_upper():
+		return "%sの初期値が上限を上回る（上限 %s、初期値 %s）" % [label, str(stock_range.get_upper()), str(initial_value)]
+	return ""
 
 
 ## 新しいフローの名前と、流出元・流入先を検査する。問題が無ければ OK を返す。

@@ -48,6 +48,10 @@ static func evaluate(program: ExprProgram, stocks: Dictionary, auxiliaries: Dict
 				for k in range(args.size() - 1, -1, -1):
 					args[k] = stack.pop_back()
 					arg_labels[k] = labels.pop_back()
+				# 下限が上限より大きい clamp は、黙って下限を返さず、実行時エラーにする。説明は失敗したときだけ作る。
+				if program.names[i] == "clamp" and args[1] > args[2]:
+					var clamp_description := _describe(program, i, left, right, left_label, right_label, args, arg_labels)
+					return _fail(result, program.positions[i], "下限が上限より大きい：%s" % clamp_description)
 				value = ExprFunctions.call_function(program.names[i], args)
 			_:
 				right = stack.pop_back()
