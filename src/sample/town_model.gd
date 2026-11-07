@@ -4,9 +4,7 @@
 ## ストック：population（人口）、food（食料）、money（お金）。
 ## フロー：births・deaths（人口）、production・consumption（食料）、taxes・expenses（お金）。
 ##
-## 補助変数（#11）がまだ無いので、「食料の不足分」max(0, population * ration - food) を、
-## deaths と consumption と expenses の式に繰り返して書いている。
-## TODO: #11 の後で、補助変数 deficit に書き直す。
+## 補助変数：deficit（食料の不足分）。deaths と expenses の式が参照する。
 ## 食料やお金が負にならないよう、いまは式で防いでいる（consumption と expenses の min）。
 ## TODO: 上限・下限の PBI が終わった後に、ストックの下限の設定へ書き換える。
 class_name TownModel
@@ -59,6 +57,22 @@ const DEFAULT_PARAMS: Dictionary = {
 	"tax_max": 1.0,  # 税率の上限。
 }
 
+## 補助変数の定義（名前, 式）。定義順に並べる。build() が add_auxiliary で定義する。
+const AUXILIARIES: Array = [
+	["deficit", "max(0, population * ration - food)"],  # 食料の不足分。人口が食べる量が、いまの食料を超えた分。
+]
+
+## フローの定義（名前, 流出元, 流入先, 式）。定義順に並べる。build() が add_flow_expr で定義する。
+## 流出元・流入先が無いときは空文字である。式は、補助変数 deficit を名前で参照する。
+const FLOWS: Array = [
+	["births", "", "population", "population * birth_rate"],
+	["deaths", "population", "", "population * death_rate + starvation_rate * deficit"],
+	["production", "", "food", "productivity * min(population, farmland)"],
+	["consumption", "food", "", "min(food, population * ration)"],
+	["taxes", "", "money", "population * tax_rate"],
+	["expenses", "money", "", "min(money, population * upkeep + relief_cost * deficit)"],
+]
+
 ## 直近の build() の失敗の説明。成功したら空である。
 var last_error: String = ""
 
@@ -84,16 +98,10 @@ func build(overrides: Dictionary = {}) -> SimModel:
 		if not _check(model.add_constant(constant_name, params[constant_name]), model):
 			return null
 
-	var deficit := "max(0, population * ration - food)"
-	var flows: Array[Array] = [
-		["births", "", "population", "population * birth_rate"],
-		["deaths", "population", "", "population * death_rate + starvation_rate * %s" % deficit],
-		["production", "", "food", "productivity * min(population, farmland)"],
-		["consumption", "food", "", "min(food, population * ration)"],
-		["taxes", "", "money", "population * tax_rate"],
-		["expenses", "money", "", "min(money, population * upkeep + relief_cost * %s)" % deficit],
-	]
-	for flow: Array in flows:
+	for auxiliary: Array in AUXILIARIES:
+		if not _check(model.add_auxiliary(auxiliary[0], auxiliary[1]), model):
+			return null
+	for flow: Array in FLOWS:
 		if not _check(model.add_flow_expr(flow[0], flow[1], flow[2], flow[3]), model):
 			return null
 	if not _add_actions(model):

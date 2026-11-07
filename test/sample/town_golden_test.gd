@@ -58,21 +58,8 @@ const GOLDEN_NO_FOOD: Array = [
 
 const STOCK_NAMES: Array[String] = ["population", "food", "money"]
 
-## TownModel と同じ内容のフロー（名前, 流出元, 流入先, 式）。定義順は TownModel と同じ。
-## 補助変数 deficit の展開は、TownModel の build() と同じ文字列にしてある。
-const DEFICIT: String = "max(0, population * ration - food)"
-
-
-# 町の初期値のパラメータ。DEFAULT_PARAMS から、ストックと定数を取り出す。
-func _flows_in_town_order() -> Array[Array]:
-	return [
-		["births", "", "population", "population * birth_rate"],
-		["deaths", "population", "", "population * death_rate + starvation_rate * %s" % DEFICIT],
-		["production", "", "food", "productivity * min(population, farmland)"],
-		["consumption", "food", "", "min(food, population * ration)"],
-		["taxes", "", "money", "population * tax_rate"],
-		["expenses", "money", "", "min(money, population * upkeep + relief_cost * %s)" % DEFICIT],
-	]
+## フローと補助変数の定義は TownModel.FLOWS と TownModel.AUXILIARIES を使う。式をこのテストで二重に持たない。
+## 期待値（上の GOLDEN_*）は、式を変えても独立に求めた値のままである。
 
 
 # overrides を反映した町を組み立てる。
@@ -83,8 +70,9 @@ func _build_town(overrides: Dictionary) -> SimModel:
 	return model
 
 
-# フローの定義順を逆にして、TownModel と同じ値のストック・定数から組み直す。
-func _build_reversed(overrides: Dictionary) -> SimModel:
+# TownModel と同じ値のストック・定数から、フローと補助変数の定義順だけを変えて組み直す。
+# reverse_flows が true ならフローを逆順に、auxiliaries_last が true なら補助変数をフローの後に定義する。
+func _build_reordered(overrides: Dictionary, reverse_flows: bool, auxiliaries_last: bool) -> SimModel:
 	var params: Dictionary = TownModel.DEFAULT_PARAMS.duplicate()
 	for key: Variant in overrides:
 		params[key] = overrides[key]
@@ -95,12 +83,28 @@ func _build_reversed(overrides: Dictionary) -> SimModel:
 		if TownModel.LABELS.has(constant_name):
 			continue
 		assert_int(model.add_constant(constant_name, params[constant_name])).is_equal(OK)
-	var flows := _flows_in_town_order()
-	flows.reverse()
+	if not auxiliaries_last:
+		_add_auxiliaries(model)
+	var flows: Array = TownModel.FLOWS.duplicate()
+	if reverse_flows:
+		flows.reverse()
 	for flow: Array in flows:
 		assert_int(model.add_flow_expr(flow[0], flow[1], flow[2], flow[3])).is_equal(OK)
+	if auxiliaries_last:
+		_add_auxiliaries(model)
 	assert_int(model.validate()).is_equal(OK)
 	return model
+
+
+func _add_auxiliaries(model: SimModel) -> void:
+	var auxiliaries: Array = TownModel.AUXILIARIES.duplicate()
+	auxiliaries.reverse()
+	for auxiliary: Array in auxiliaries:
+		assert_int(model.add_auxiliary(auxiliary[0], auxiliary[1])).is_equal(OK)
+
+
+func _build_reversed(overrides: Dictionary) -> SimModel:
+	return _build_reordered(overrides, true, false)
 
 
 # 12 ターン進めて、ターン 0〜12 の [人口, 食料, お金] を返す。
@@ -166,6 +170,22 @@ func test_reversed_flow_order_gives_the_same_golden_values() -> void:
 	_assert_matches_golden(_run(_build_reversed({"food": 0.0})), GOLDEN_NO_FOOD, "逆順・food=0.0")
 
 
+# 完全一致を求めてよいのは、どのストックにも触れるフローが2本以下のときだけである。
+# 0.0 + a + b と 0.0 + b + a は、2 項の足し算が交換できるので同じ値になる。
+# 3 本以上になると (a + b) + c と (c + b) + a が 1 ulp ずれうるので、完全一致ではなく許容誤差で比べる。
+# この前提を、定義から数えて固定する。補助変数 deficit は流れを持たないので、数は増えない。
+func test_exact_equality_premise_each_stock_has_at_most_two_flows() -> void:
+	var touching: Dictionary = {}
+	for flow: Array in TownModel.FLOWS:
+		for stock_name: String in [flow[1], flow[2]]:
+			if stock_name != "":
+				touching[stock_name] = touching.get(stock_name, 0) + 1
+	for stock_name: String in TownModel.LABELS:
+		assert_int(touching.get(stock_name, 0)) \
+			.override_failure_message("%s に触れるフローが3本以上ある。完全一致のテストを許容誤差に変える" % stock_name) \
+			.is_less_equal(2)
+
+
 func test_reversed_flow_order_is_exactly_equal_to_the_town_order() -> void:
 	for overrides: Dictionary in [{}, {"food": 0.0}]:
 		var forward := _run(_build_town(overrides))
@@ -173,23 +193,26 @@ func test_reversed_flow_order_is_exactly_equal_to_the_town_order() -> void:
 		assert_array(reversed).is_equal(forward)
 
 
-# テストで組み直した式が、TownModel の式と一致することを確かめる。
-# 一致しないと、逆順のテストが別のモデルを確かめていることになる。
-# 公開の取得関数が無いので、SimModel の内部の _flows を get() で読む。
-func test_rebuilt_flows_match_the_town_model_flows() -> void:
-	var town_flows: Array = _build_town({}).get("_flows")
-	var expected := _flows_in_town_order()
-	assert_int(town_flows.size()).is_equal(expected.size())
-	for i in range(expected.size()):
-		var flow: Dictionary = town_flows[i]
-		assert_str(flow["name"]).is_equal(expected[i][0])
-		assert_str(flow["source"]).is_equal(expected[i][1])
-		assert_str(flow["sink"]).is_equal(expected[i][2])
-		assert_str(flow["expression"]).is_equal(expected[i][3])
-	var reversed_flows: Array = _build_reversed({}).get("_flows")
-	assert_int(reversed_flows.size()).is_equal(expected.size())
-	for i in range(expected.size()):
-		var flow: Dictionary = reversed_flows[i]
-		var original: Array = expected[expected.size() - 1 - i]
-		assert_str(flow["name"]).is_equal(original[0])
-		assert_str(flow["expression"]).is_equal(original[3])
+# 補助変数を、フローの後に定義しても、結果は変わらない（依存の順は定義の順ではなく、参照で決まる）。
+func test_defining_the_auxiliary_after_the_flows_gives_the_same_result() -> void:
+	for overrides: Dictionary in [{}, {"food": 0.0}]:
+		var forward := _run(_build_town(overrides))
+		var late := _run(_build_reordered(overrides, false, true))
+		assert_array(late).is_equal(forward)
+
+
+# TownModel が公開するフローと補助変数の定義が、使えること。
+func test_town_model_publishes_flows_and_auxiliaries() -> void:
+	assert_int(TownModel.FLOWS.size()).is_equal(6)
+	assert_int(TownModel.AUXILIARIES.size()).is_equal(1)
+	var names: Array[String] = []
+	for flow: Array in TownModel.FLOWS:
+		assert_int(flow.size()).is_equal(4)
+		names.append(flow[0])
+	assert_array(names).is_equal(["births", "deaths", "production", "consumption", "taxes", "expenses"])
+	assert_str(TownModel.AUXILIARIES[0][0]).is_equal("deficit")
+	# deaths と expenses は、不足分を式に繰り返さず、補助変数 deficit を参照する。
+	for flow: Array in TownModel.FLOWS:
+		if flow[0] == "deaths" or flow[0] == "expenses":
+			assert_str(flow[3]).contains("deficit")
+			assert_str(flow[3]).not_contains("ration - food")
