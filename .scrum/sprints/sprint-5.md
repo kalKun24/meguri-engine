@@ -1,5 +1,5 @@
 # Sprint 5
-- phase: review
+- phase: retrospective
 - goal: スプリントの終わりに、PO は、補助変数を使ったモデルが定義の順に関わらず同じ値になることと、上限・下限でストックが止まることを確かめられる。式や名前の書き間違いと実行時エラーでは、直し方と原因の名前が示される。
 - started: 2026-11-07T13:26:32+09:00
 - base_branch: main
@@ -7,10 +7,10 @@
 ## 対象 PBI
 | PBI | points | ui | 担当構成 | 状態 | 差し戻し | ブランチ | 作業ディレクトリ |
 |---|---|---|---|---|---|---|---|
-| #22 | 3 | no | game-developer → code-reviewer・security-auditor | approved | 0 | scrum/22 | /home/kal24hi/Projects/meguri-engine/.claude/worktrees/agent-ae258dc778111e4dc |
-| #7 | 2 | no | game-developer → code-reviewer・security-auditor・data-scientist | approved | 0 | scrum/7 | /home/kal24hi/Projects/meguri-engine/.claude/worktrees/agent-a83712e3a57400491 |
-| #11 | 3 | no | game-developer → code-reviewer・security-auditor・data-scientist | approved | 0 | scrum/11 | /home/kal24hi/Projects/meguri-engine/.claude/worktrees/agent-a57a1eeef4078e632 |
-| #23 | 2 | no | game-developer → code-reviewer・security-auditor | approved | 0 | scrum/23 | /home/kal24hi/Projects/meguri-engine/.claude/worktrees/agent-a2dbafa065a661fbc |
+| #22 | 3 | no | game-developer → code-reviewer・security-auditor | accepted | 0 | scrum/22 | /home/kal24hi/Projects/meguri-engine/.claude/worktrees/agent-ae258dc778111e4dc |
+| #7 | 2 | no | game-developer → code-reviewer・security-auditor・data-scientist | accepted | 0 | scrum/7 | /home/kal24hi/Projects/meguri-engine/.claude/worktrees/agent-a83712e3a57400491 |
+| #11 | 3 | no | game-developer → code-reviewer・security-auditor・data-scientist | accepted | 0 | scrum/11 | /home/kal24hi/Projects/meguri-engine/.claude/worktrees/agent-a57a1eeef4078e632 |
+| #23 | 2 | no | game-developer → code-reviewer・security-auditor | accepted | 0 | scrum/23 | /home/kal24hi/Projects/meguri-engine/.claude/worktrees/agent-a2dbafa065a661fbc |
 
 ## デモ台本
 | # | PO の操作 | 期待する結果 | PBI |
@@ -184,3 +184,14 @@
 - デモ：/home/kal24hi/Projects/meguri-engine/.scrum/demos/sprint-5/（README.md、demo.sh、rehearsal.md）。回：1。
 - リハーサル：1度目の通しで5場面すべてが一致した。
 - phase を review にした。
+
+### スプリントレビュー
+- PO にデモの台本とリハーサルの結果、リスク（#41：命令数の上限、デッキのリスク7）、PO の判断が要る4点（#39 アクションと範囲、アクション名・終了条件の名前の規則、#42 補助変数の参照、#43 大きな値の表示）を示した。
+- PO はデモで見たもの全体を受け入れた。
+- PR #44 で main にマージした。マージ後の main でテストは 437 件、0 errors / 0 failures、WARNING・leaked は0件だった。
+- #22・#7・#11・#23 は閉じた（done）。worktree と PBI のブランチ、統合ブランチを削除した。
+
+## デモの判定
+| 回 | 日時 | 判定 | PO の指摘 | 原因の PBI | 対応 |
+|---|---|---|---|---|---|
+| 1 | 2026-11-07T21:41:28+09:00 | 受け入れ | — | — | マージした |
