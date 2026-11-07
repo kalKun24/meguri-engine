@@ -1,5 +1,6 @@
 ## ストック・フロー・定数を持ち、1ターンずつ一斉に更新するシミュレーションのコア。
 ## Node に依存しない。定義の読み込みはこのクラスの外で行い、add_* 関数を呼ぶ。
+## ゲームが終わった後（is_ended() が true）は、モデルを変える関数（add_*・set_*・validate・step・advance_turn・apply_action）がすべて ERR_LOCKED を返し、状態を変えない。読むだけの関数（get_*・has_*・is_ended）は変わらず使える。
 class_name SimModel
 extends RefCounted
 
@@ -27,8 +28,10 @@ var _auxiliary_order: Array[int] = []
 var _ranges: Dictionary = {}
 var _names: Dictionary = {}
 var _actions: Dictionary = {}
-## 勝利・敗北の条件。定義順に {name, outcome, expression, root} を持つ。
+## 勝利・敗北の条件。定義順に {name, outcome, expression, root, program} を持つ。program は validate() が作る命令列である。
 var _conditions: Array[Dictionary] = []
+## 条件の式を組み立てた回数（ExprCompiler.compile の呼び出し数）。組み立てがターン数に比例しないことを、テストで確かめるために数える。
+var _condition_build_count: int = 0
 ## 勝利と敗北が同じターンに成り立ったときに採る側。
 var _priority: String = GameResult.OUTCOME_DEFEAT
 var _result: GameResult = GameResult.new()
@@ -47,7 +50,10 @@ var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 ## 範囲が、下限が上限より大きい、下限か上限が NaN・無限大、初期値が範囲外、扱いが未知のときも ERR_INVALID_PARAMETER を返す。
 ## 定義の個数が ModelCheck.MAX_DEFINITIONS（1000 個。ストック・定数・フローの合計）に達していると ERR_OUT_OF_MEMORY を返す。
 ## 同名の定義がある、または式で使える関数（min など）と同名だと ERR_ALREADY_EXISTS を返す。失敗のとき、モデルは変わらない。
+## ゲームが既に終わっているときは、何も変えずに ERR_LOCKED を返す（last_error は「ゲームは終了している」）。
 func add_stock(stock_name: String, initial_value: float, stock_range: StockRange = null) -> Error:
+	if _result.is_ended():
+		return _fail_ended()
 	var error := _check_new_name(stock_name, "ストック名", true)
 	if error != OK:
 		return error
@@ -73,7 +79,10 @@ func get_stock_range(stock_name: String) -> StockRange:
 
 ## 定数を定義する。成功すると OK を返し、last_error を空にする。
 ## エラーの条件は add_stock と同じである（値が NaN・無限大のときも ERR_INVALID_PARAMETER。名前の規則も同じ）。
+## ゲームが既に終わっているときは、何も変えずに ERR_LOCKED を返す（last_error は「ゲームは終了している」）。
 func add_constant(constant_name: String, value: float) -> Error:
+	if _result.is_ended():
+		return _fail_ended()
 	var error := _check_new_name(constant_name, "定数名", true)
 	if error != OK:
 		return error
@@ -92,7 +101,10 @@ func add_constant(constant_name: String, value: float) -> Error:
 ## ERR_INVALID_PARAMETER：フロー名が空・長すぎる・名前の規則（add_stock を参照）に反する、amount が NaN・無限大、存在しないストックを指す、流出元と流入先の両方が空。
 ## ERR_OUT_OF_MEMORY：定義の個数が上限（ModelCheck.MAX_DEFINITIONS）に達している。
 ## ERR_ALREADY_EXISTS：同名の定義がある、または式で使える関数と同名である。
+## ゲームが既に終わっているときは、何も変えずに ERR_LOCKED を返す（last_error は「ゲームは終了している」）。
 func add_flow(flow_name: String, source: String, sink: String, amount: float) -> Error:
+	if _result.is_ended():
+		return _fail_ended()
 	var error := _check_new_flow(flow_name, source, sink)
 	if error != OK:
 		return error
@@ -113,7 +125,10 @@ func add_flow(flow_name: String, source: String, sink: String, amount: float) ->
 ## ここでは名前の検査と構文だけを検証する。ERR_PARSE_ERROR：構文エラー。ERR_INVALID_PARAMETER：名前の誤り。ERR_OUT_OF_MEMORY：定義の個数が上限に達している。
 ## 名前の解決、フローの量を参照していないこと、循環参照が無いことは、validate() が最初の step() の前にまとめて検査する。
 ## 成功すると OK を返し、last_error を空にする。失敗のとき、モデルは変わらない。
+## ゲームが既に終わっているときは、何も変えずに ERR_LOCKED を返す（last_error は「ゲームは終了している」）。
 func add_auxiliary(auxiliary_name: String, expression: String) -> Error:
+	if _result.is_ended():
+		return _fail_ended()
 	var error := _check_new_name(auxiliary_name, "補助変数名", true)
 	if error != OK:
 		return error
@@ -133,7 +148,10 @@ func add_auxiliary(auxiliary_name: String, expression: String) -> Error:
 ## ここでは構文だけを検証する。ERR_PARSE_ERROR：構文エラー（last_error に式の抜粋・位置・原因が入る）。
 ## 名前の解決と引数の数の検証は、validate() が最初の step() の前にまとめて行う。
 ## そのほかのエラーは add_flow と同じである。失敗のとき、モデルは変わらない。
+## ゲームが既に終わっているときは、何も変えずに ERR_LOCKED を返す（last_error は「ゲームは終了している」）。
 func add_flow_expr(flow_name: String, source: String, sink: String, expression: String) -> Error:
+	if _result.is_ended():
+		return _fail_ended()
 	var error := _check_new_flow(flow_name, source, sink)
 	if error != OK:
 		return error
@@ -155,7 +173,10 @@ func add_flow_expr(flow_name: String, source: String, sink: String, expression: 
 ## 循環参照のときは、循環の経路（例：a -> b -> a）を入れる。経路は、先頭から ModelCheck.MAX_CYCLE_PATH_LENGTH 個の名前までを示し、残りは「...」で省く。
 ## 循環の検出と順序の計算は、再帰を使わない。
 ## step() は、組み立てが済んでいなければ最初に自分で呼ぶ。定義を足した後は、次の step() でもう一度行う。
+## ゲームが既に終わっているときは、何も変えずに ERR_LOCKED を返す（last_error は「ゲームは終了している」）。
 func validate() -> Error:
+	if _result.is_ended():
+		return _fail_ended()
 	var auxiliary_names: Dictionary = {}
 	for auxiliary: Dictionary in _auxiliaries:
 		auxiliary_names[auxiliary["name"]] = true
@@ -175,8 +196,33 @@ func validate() -> Error:
 				ModelCheck.escape(flow["name"]), compiled.error.position, ModelCheck.escape_reason(compiled.error.message), ModelCheck.escape_expression(flow["expression"])
 			])
 		flow["program"] = compiled.program
+	var condition_error := _compile_conditions()
+	if condition_error != OK:
+		return condition_error
 	_validated = true
 	return _succeed()
+
+
+## 勝利・敗北の条件の式を組み立てて、結果の命令列を条件の "program" に持たせる。_judge() は毎ターン、これを評価するだけである。
+## 組み立ては validate() の中で行い、_validated が false の間（定義が増えた、定数が変わった）だけやり直す。補助変数とフローの式と同じ仕組みである。
+## 条件の式からは、ストックと定数だけを参照できる（補助変数とフローの量は参照できない）。
+## 誤りがあれば last_error を設定して ERR_INVALID_DATA を返す。
+func _compile_conditions() -> Error:
+	for condition: Dictionary in _conditions:
+		_condition_build_count += 1
+		var compiled: ExprCompileResult = ExprCompiler.compile(condition["root"], condition["expression"], _stocks, _constants)
+		if not compiled.ok:
+			condition["program"] = null
+			return _fail(ERR_INVALID_DATA, "%sの式に誤りがある（位置 %d）：%s 式：%s" % [
+				_condition_label(condition), compiled.error.position, ModelCheck.escape_reason(compiled.error.message), ModelCheck.escape_expression(condition["expression"])
+			])
+		condition["program"] = compiled.program
+	return OK
+
+
+## エラー文に使う条件の呼び名（例：勝利条件「name」）を返す。名前はエスケープする。
+func _condition_label(condition: Dictionary) -> String:
+	return "%s「%s」" % ["勝利条件" if condition["outcome"] == GameResult.OUTCOME_VICTORY else "敗北条件", ModelCheck.escape(condition["name"])]
 
 
 ## 補助変数の式を組み立て、依存の順を決める。誤りがあれば last_error を設定して ERR_INVALID_DATA を返す。
@@ -284,9 +330,13 @@ func advance_turn() -> Error:
 
 ## 乱数の種を決める。以後、get_rng() の乱数列は、同じ種なら同じになる。種を決めないときの種は 0 である。
 ## 乱数を使う処理（#34 から）は、グローバルの randi() や randf() ではなく、get_rng() を使う。
-func set_seed(seed_value: int) -> void:
+## 成功すると OK を返し、last_error を空にする。ゲームが既に終わっているときは、何も変えずに ERR_LOCKED を返す（last_error は「ゲームは終了している」）。
+func set_seed(seed_value: int) -> Error:
+	if _result.is_ended():
+		return _fail_ended()
 	_seed = seed_value
 	_rng.seed = seed_value
+	return _succeed()
 
 
 ## 直近の set_seed() で決めた種を返す。実行の記録に残すために使う。
@@ -388,8 +438,9 @@ func _judge(turn: int) -> Dictionary:
 	var first_defeat: String = ""
 	for condition: Dictionary in _conditions:
 		var condition_name: String = condition["name"]
-		var label := "%s「%s」" % ["勝利条件" if condition["outcome"] == GameResult.OUTCOME_VICTORY else "敗北条件", ModelCheck.escape(condition_name)]
-		var evaluated := _evaluate_now(condition["root"], condition["expression"])
+		var label := _condition_label(condition)
+		# 組み立て済みの命令列を評価するだけである。組み立ては validate() が行う（advance_turn() は流れの前に済ませている）。
+		var evaluated: ExprEvalResult = ExprEvaluator.evaluate(condition["program"], _stocks)
 		if not evaluated.ok:
 			verdict["error"] = _fail(FAILED, "ターン %d の終了判定でエラー（ターンは取り消した）：%sの式の位置 %d で、%s 式：%s" % [
 				turn, label, evaluated.position, ModelCheck.escape_reason(evaluated.message), ModelCheck.escape_expression(condition["expression"])
@@ -453,7 +504,10 @@ func _fail_ended() -> Error:
 ## ERR_OUT_OF_MEMORY：定義の個数が上限（ModelCheck.MAX_DEFINITIONS）に達している。
 ## ERR_ALREADY_EXISTS：同名の定義（ストック・定数・フロー・アクション）がある、または式で使える関数と同名である。
 ## アクション名は、ストックなどと同じ名前空間にある。
+## ゲームが既に終わっているときは、何も変えずに ERR_LOCKED を返す（last_error は「ゲームは終了している」）。
 func add_action(action_name: String, condition: String, effects: Array) -> Error:
+	if _result.is_ended():
+		return _fail_ended()
 	var error := _check_new_name(action_name, "アクション名")
 	if error != OK:
 		return error
@@ -549,6 +603,7 @@ func apply_action(action_name: String) -> Error:
 ## ERR_OUT_OF_MEMORY：定義の個数が上限（ModelCheck.MAX_DEFINITIONS）に達している。
 ## ERR_ALREADY_EXISTS：同名の定義（ストック・定数・フロー・アクション・条件）がある、または式で使える関数と同名である。
 ## 条件の名前は、ストックなどと同じ名前空間にあり、個数の上限も共有する。
+## ゲームが既に終わっているときは、何も変えずに ERR_LOCKED を返す（last_error は「ゲームは終了している」）。add_defeat_condition も同じである。
 func add_victory_condition(condition_name: String, expression: String) -> Error:
 	return _add_condition(condition_name, expression, GameResult.OUTCOME_VICTORY, "勝利条件")
 
@@ -561,7 +616,10 @@ func add_defeat_condition(condition_name: String, expression: String) -> Error:
 ## 勝利と敗北が同じターンに成り立ったとき、どちらを採るかを決める。outcome は GameResult.OUTCOME_VICTORY か OUTCOME_DEFEAT である。
 ## 決めないときは、敗北を採る。成功すると OK を返し、last_error を空にする。
 ## それ以外の値（OUTCOME_PENDING を含む）は ERR_INVALID_PARAMETER を返し、設定は変わらない。
+## ゲームが既に終わっているときは、何も変えずに ERR_LOCKED を返す（last_error は「ゲームは終了している」）。
 func set_simultaneous_priority(outcome: String) -> Error:
+	if _result.is_ended():
+		return _fail_ended()
 	if outcome != GameResult.OUTCOME_VICTORY and outcome != GameResult.OUTCOME_DEFEAT:
 		return _fail(ERR_INVALID_PARAMETER, "優先する結果は victory か defeat にする：%s" % ModelCheck.escape(outcome))
 	_priority = outcome
@@ -587,6 +645,8 @@ func get_action_names() -> Array[String]:
 
 
 func _add_condition(condition_name: String, expression: String, outcome: String, what: String) -> Error:
+	if _result.is_ended():
+		return _fail_ended()
 	var error := _check_new_name(condition_name, "%s名" % what)
 	if error != OK:
 		return error
@@ -594,7 +654,8 @@ func _add_condition(condition_name: String, expression: String, outcome: String,
 	if parsed["error"] != OK:
 		return parsed["error"]
 	_names[condition_name] = true
-	_conditions.append({"name": condition_name, "outcome": outcome, "expression": expression, "root": parsed["root"]})
+	_conditions.append({"name": condition_name, "outcome": outcome, "expression": expression, "root": parsed["root"], "program": null})
+	_validated = false
 	return _succeed()
 
 
