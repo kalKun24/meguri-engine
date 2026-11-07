@@ -10,6 +10,8 @@ const MAX_NAME_LENGTH: int = 64
 const MAX_DEFINITIONS: int = 1000
 ## 1つのアクションが持てる効果の最大個数。これを超える定義は拒否する。
 const MAX_ACTION_EFFECTS: int = 50
+## 補助変数の循環参照のエラー文に出す経路の最大の名前の数。超えたら先頭からこの数だけ示し、残りを「...」で省く。
+const MAX_CYCLE_PATH_LENGTH: int = 8
 ## エラー文に名前を出すときの最大長（文字数）。超えた分は「...」で省く。
 const MAX_MESSAGE_NAME_LENGTH: int = 32
 ## エラー文に式（条件・効果の式、アクションの効果の文を含む）を出すときの抜粋の最大長。

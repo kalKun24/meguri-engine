@@ -8,13 +8,14 @@ enum Op {
 	ADD, SUB, MUL, DIV, MOD,
 	LT, LE, GT, GE, EQ, NE,
 	CALL,
+	PUSH_AUXILIARY,
 }
 
 ## 命令の列。
 var ops: Array[Op] = []
 ## PUSH_NUMBER の値。定数は組み立て時に値へ置き換える。それ以外の命令では 0.0 である。
 var numbers: PackedFloat64Array = PackedFloat64Array()
-## PUSH_STOCK のストック名、CALL の関数名。それ以外の命令では空である。
+## PUSH_STOCK のストック名、PUSH_AUXILIARY の補助変数名、CALL の関数名。名前で値を引く命令は、この列の名前で引く。それ以外の命令では空である。
 var names: Array[String] = []
 ## 命令のもとになった節の、式の中の位置。
 var positions: PackedInt32Array = PackedInt32Array()

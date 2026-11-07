@@ -6,8 +6,10 @@ extends RefCounted
 
 
 ## program を評価する。stocks はストック名をキー、現在の値を値にした辞書である（読むだけで、変えない）。
+## auxiliaries は補助変数名をキー、そのターンの値を値にした辞書で、補助変数を参照する式を評価するときに渡す。
+## 値は名前で引くので、命令列の names と同じ名前の辞書を渡せば、評価の途中の値も名前で追える。
 ## 失敗のとき result.ok が false になり、result.position と result.message に原因の演算が入る。
-static func evaluate(program: ExprProgram, stocks: Dictionary) -> ExprEvalResult:
+static func evaluate(program: ExprProgram, stocks: Dictionary, auxiliaries: Dictionary = {}) -> ExprEvalResult:
 	var result := ExprEvalResult.new()
 	var stack: Array[float] = []
 	for i in program.ops.size():
@@ -20,6 +22,9 @@ static func evaluate(program: ExprProgram, stocks: Dictionary) -> ExprEvalResult
 				continue
 			ExprProgram.Op.PUSH_STOCK:
 				stack.append(stocks[program.names[i]])
+				continue
+			ExprProgram.Op.PUSH_AUXILIARY:
+				stack.append(auxiliaries[program.names[i]])
 				continue
 			ExprProgram.Op.NEG:
 				value = -stack.pop_back()
