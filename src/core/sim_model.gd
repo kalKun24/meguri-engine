@@ -127,6 +127,7 @@ func add_flow(flow_name: String, source: String, sink: String, amount: float) ->
 ## ここでは名前の検査と構文だけを検証する。ERR_PARSE_ERROR：構文エラー。ERR_INVALID_PARAMETER：名前の誤り。ERR_OUT_OF_MEMORY：定義の個数が上限に達している。
 ## 名前の解決、フローの量を参照していないこと、循環参照が無いことは、validate() が最初の step() の前にまとめて検査する。
 ## 成功すると OK を返し、last_error を空にする。失敗のとき、モデルは変わらない。
+## ERR_OUT_OF_MEMORY：モデル全体の命令数が上限（ModelCheck.MAX_TOTAL_OPS）を超える。補助変数・フロー・条件の式の命令の合計で数え、last_error に上限と実際の数を出す。
 ## ゲームが既に終わっているときは、何も変えずに ERR_LOCKED を返す（last_error は「ゲームは終了している」）。
 func add_auxiliary(auxiliary_name: String, expression: String) -> Error:
 	if _result.is_ended():
@@ -155,6 +156,7 @@ func add_auxiliary(auxiliary_name: String, expression: String) -> Error:
 ## ここでは構文だけを検証する。ERR_PARSE_ERROR：構文エラー（last_error に式の抜粋・位置・原因が入る）。
 ## 名前の解決と引数の数の検証は、validate() が最初の step() の前にまとめて行う。
 ## そのほかのエラーは add_flow と同じである。失敗のとき、モデルは変わらない。
+## ERR_OUT_OF_MEMORY：モデル全体の命令数が上限（ModelCheck.MAX_TOTAL_OPS）を超える。補助変数・フロー・条件の式の命令の合計で数え、last_error に上限と実際の数を出す。
 ## ゲームが既に終わっているときは、何も変えずに ERR_LOCKED を返す（last_error は「ゲームは終了している」）。
 func add_flow_expr(flow_name: String, source: String, sink: String, expression: String) -> Error:
 	if _result.is_ended():
@@ -615,6 +617,7 @@ func apply_action(action_name: String) -> Error:
 ## ERR_OUT_OF_MEMORY：定義の個数が上限（ModelCheck.MAX_DEFINITIONS）に達している。
 ## ERR_ALREADY_EXISTS：同名の定義（ストック・定数・フロー・アクション・条件）がある、または式で使える関数と同名である。
 ## 条件の名前は、ストックなどと同じ名前空間にあり、個数の上限も共有する。
+## ERR_OUT_OF_MEMORY：モデル全体の命令数が上限（ModelCheck.MAX_TOTAL_OPS）を超える。補助変数・フロー・条件の式の命令の合計で数え、last_error に上限と実際の数を出す。
 ## ゲームが既に終わっているときは、何も変えずに ERR_LOCKED を返す（last_error は「ゲームは終了している」）。add_defeat_condition も同じである。
 func add_victory_condition(condition_name: String, expression: String) -> Error:
 	return _add_condition(condition_name, expression, GameResult.OUTCOME_VICTORY, "勝利条件")
