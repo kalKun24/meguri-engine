@@ -37,6 +37,8 @@ var _priority: String = GameResult.OUTCOME_DEFEAT
 var _result: GameResult = GameResult.new()
 var _turn: int = 0
 var _validated: bool = true
+## 補助変数・フロー・条件の式の命令数の合計。定義した時点で、構文木の節の数から数える（組み立ての成否や program の null に依らない）。
+var _total_ops: int = 0
 var _seed: int = 0
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
@@ -125,6 +127,7 @@ func add_flow(flow_name: String, source: String, sink: String, amount: float) ->
 ## ここでは名前の検査と構文だけを検証する。ERR_PARSE_ERROR：構文エラー。ERR_INVALID_PARAMETER：名前の誤り。ERR_OUT_OF_MEMORY：定義の個数が上限に達している。
 ## 名前の解決、フローの量を参照していないこと、循環参照が無いことは、validate() が最初の step() の前にまとめて検査する。
 ## 成功すると OK を返し、last_error を空にする。失敗のとき、モデルは変わらない。
+## ERR_OUT_OF_MEMORY：モデル全体の命令数が上限（ModelCheck.MAX_TOTAL_OPS）を超える。補助変数・フロー・条件・アクションの式の命令の合計で数え、last_error に上限と実際の数を出す。
 ## ゲームが既に終わっているときは、何も変えずに ERR_LOCKED を返す（last_error は「ゲームは終了している」）。
 func add_auxiliary(auxiliary_name: String, expression: String) -> Error:
 	if _result.is_ended():
@@ -137,7 +140,12 @@ func add_auxiliary(auxiliary_name: String, expression: String) -> Error:
 		return _fail(ERR_PARSE_ERROR, "補助変数「%s」の式に構文エラーがある（位置 %d）：%s 式：%s" % [
 			ModelCheck.escape(auxiliary_name), parsed.error.position, ModelCheck.escape_reason(parsed.error.message), ModelCheck.escape_expression(expression)
 		])
+	var ops := ExprCompiler.count_ops(parsed.root)
+	var ops_error := _check_total_ops(ops, "補助変数「%s」" % ModelCheck.escape(auxiliary_name))
+	if ops_error != OK:
+		return ops_error
 	_names[auxiliary_name] = true
+	_total_ops += ops
 	_auxiliaries.append({"name": auxiliary_name, "expression": expression, "root": parsed.root, "program": null, "dependencies": [] as Array[int]})
 	_validated = false
 	return _succeed()
@@ -148,6 +156,7 @@ func add_auxiliary(auxiliary_name: String, expression: String) -> Error:
 ## ここでは構文だけを検証する。ERR_PARSE_ERROR：構文エラー（last_error に式の抜粋・位置・原因が入る）。
 ## 名前の解決と引数の数の検証は、validate() が最初の step() の前にまとめて行う。
 ## そのほかのエラーは add_flow と同じである。失敗のとき、モデルは変わらない。
+## ERR_OUT_OF_MEMORY：モデル全体の命令数が上限（ModelCheck.MAX_TOTAL_OPS）を超える。補助変数・フロー・条件・アクションの式の命令の合計で数え、last_error に上限と実際の数を出す。
 ## ゲームが既に終わっているときは、何も変えずに ERR_LOCKED を返す（last_error は「ゲームは終了している」）。
 func add_flow_expr(flow_name: String, source: String, sink: String, expression: String) -> Error:
 	if _result.is_ended():
@@ -160,7 +169,12 @@ func add_flow_expr(flow_name: String, source: String, sink: String, expression: 
 		return _fail(ERR_PARSE_ERROR, "フロー「%s」の式に構文エラーがある（位置 %d）：%s 式：%s" % [
 			ModelCheck.escape(flow_name), parsed.error.position, ModelCheck.escape_reason(parsed.error.message), ModelCheck.escape_expression(expression)
 		])
+	var ops := ExprCompiler.count_ops(parsed.root)
+	var ops_error := _check_total_ops(ops, "フロー「%s」" % ModelCheck.escape(flow_name))
+	if ops_error != OK:
+		return ops_error
 	_names[flow_name] = true
+	_total_ops += ops
 	_flows.append({"name": flow_name, "source": source, "sink": sink, "amount": 0.0, "expression": expression, "root": parsed.root, "program": null})
 	_validated = false
 	return _succeed()
@@ -503,6 +517,7 @@ func _fail_ended() -> Error:
 ## ERR_INVALID_DATA：式が未定義の名前や許可されていない関数を使っている。
 ## ERR_OUT_OF_MEMORY：定義の個数が上限（ModelCheck.MAX_DEFINITIONS）に達している。
 ## ERR_ALREADY_EXISTS：同名の定義（ストック・定数・フロー・アクション）がある、または式で使える関数と同名である。
+## ERR_OUT_OF_MEMORY：実行条件と全効果の式の命令数を足すと、モデル全体の命令数が上限（ModelCheck.MAX_TOTAL_OPS）を超える。last_error に上限と実際の数を出す。
 ## アクション名は、ストックなどと同じ名前空間にある。
 ## ゲームが既に終わっているときは、何も変えずに ERR_LOCKED を返す（last_error は「ゲームは終了している」）。
 func add_action(action_name: String, condition: String, effects: Array) -> Error:
@@ -541,7 +556,15 @@ func add_action(action_name: String, condition: String, effects: Array) -> Error
 		if parsed["error"] != OK:
 			return parsed["error"]
 		effect_list.append({"target": target, "expression": expression, "root": parsed["root"]})
+	# 実行条件と全効果の式の命令数を、他の式と同じ合計にかける。パース後・状態を変える前に検査する。
+	var ops := ExprCompiler.count_ops(condition_root)
+	for effect_entry: Dictionary in effect_list:
+		ops += ExprCompiler.count_ops(effect_entry["root"])
+	var ops_error := _check_total_ops(ops, "アクション「%s」" % escaped)
+	if ops_error != OK:
+		return ops_error
 	_names[action_name] = true
+	_total_ops += ops
 	_actions[action_name] = {"condition": condition, "condition_root": condition_root, "effects": effect_list}
 	return _succeed()
 
@@ -603,6 +626,7 @@ func apply_action(action_name: String) -> Error:
 ## ERR_OUT_OF_MEMORY：定義の個数が上限（ModelCheck.MAX_DEFINITIONS）に達している。
 ## ERR_ALREADY_EXISTS：同名の定義（ストック・定数・フロー・アクション・条件）がある、または式で使える関数と同名である。
 ## 条件の名前は、ストックなどと同じ名前空間にあり、個数の上限も共有する。
+## ERR_OUT_OF_MEMORY：モデル全体の命令数が上限（ModelCheck.MAX_TOTAL_OPS）を超える。補助変数・フロー・条件・アクションの式の命令の合計で数え、last_error に上限と実際の数を出す。
 ## ゲームが既に終わっているときは、何も変えずに ERR_LOCKED を返す（last_error は「ゲームは終了している」）。add_defeat_condition も同じである。
 func add_victory_condition(condition_name: String, expression: String) -> Error:
 	return _add_condition(condition_name, expression, GameResult.OUTCOME_VICTORY, "勝利条件")
@@ -653,7 +677,12 @@ func _add_condition(condition_name: String, expression: String, outcome: String,
 	var parsed := _parse_checked(expression, "%s「%s」の式" % [what, ModelCheck.escape(condition_name)])
 	if parsed["error"] != OK:
 		return parsed["error"]
+	var ops := ExprCompiler.count_ops(parsed["root"])
+	var ops_error := _check_total_ops(ops, "%s「%s」" % [what, ModelCheck.escape(condition_name)])
+	if ops_error != OK:
+		return ops_error
 	_names[condition_name] = true
+	_total_ops += ops
 	_conditions.append({"name": condition_name, "outcome": outcome, "expression": expression, "root": parsed["root"], "program": null})
 	_validated = false
 	return _succeed()
@@ -750,6 +779,16 @@ func _check_new_name(name_value: String, what: String, identifier: bool = false)
 		return _fail(ERR_ALREADY_EXISTS, "同名の定義がある：%s" % ModelCheck.escape(name_value))
 	if ExprFunctions.is_allowed(name_value):
 		return _fail(ERR_ALREADY_EXISTS, "式で使える関数と同名である：%s" % ModelCheck.escape(name_value))
+	return OK
+
+
+## 式を足すと、モデル全体の命令数が ModelCheck.MAX_TOTAL_OPS を超えるかを検査する。超えるなら ERR_OUT_OF_MEMORY で、上限と実際の数（足した後の合計）を last_error に出す。
+## 検査だけで、何も変えない。
+func _check_total_ops(ops: int, label: String) -> Error:
+	if _total_ops + ops > ModelCheck.MAX_TOTAL_OPS:
+		return _fail(ERR_OUT_OF_MEMORY, "%sを足すと、モデル全体の命令数が上限を超える（上限 %d、実際 %d。この式は %d 命令）" % [
+			label, ModelCheck.MAX_TOTAL_OPS, _total_ops + ops, ops
+		])
 	return OK
 
 
