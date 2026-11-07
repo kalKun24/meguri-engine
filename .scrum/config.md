@@ -2,7 +2,7 @@
 - backend: github
 - capacity: 10
 - base_branch: main
-- sprint: 5
+- sprint: 6
 - github.repo: kalKun24/meguri-engine
 
 ## Definition of Done
