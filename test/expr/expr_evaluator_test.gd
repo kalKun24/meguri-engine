@@ -236,3 +236,23 @@ func test_long_left_associative_expression_does_not_hit_call_depth_limit() -> vo
 	var mixed := "pop" + "-1+1".repeat(249)
 	assert_bool(mixed.length() <= 1000).is_true()
 	assert_float(_value(mixed)).is_equal(100.0)
+
+
+# --- clamp の下限と上限 ---
+
+func test_clamp_with_lower_above_upper_is_runtime_error_naming_the_operation() -> void:
+	var result := _run("1 + clamp(5, 10, 0)")
+	assert_bool(result.ok).is_false()
+	assert_int(result.position).is_equal(4)
+	assert_str(result.message).contains("下限が上限より大きい")
+	assert_str(result.message).contains("clamp(5.0, 10.0, 0.0)")
+
+
+func test_clamp_with_lower_equal_to_upper_is_allowed() -> void:
+	assert_float(_value("clamp(5, 3, 3)")).is_equal(3.0)
+
+
+func test_clamp_with_lower_above_upper_from_stocks_is_runtime_error() -> void:
+	var result := _run("clamp(pop, pop + 1, pop)")
+	assert_bool(result.ok).is_false()
+	assert_str(result.message).contains("下限が上限より大きい")

@@ -28,11 +28,14 @@ static func evaluate(program: ExprProgram, stocks: Dictionary) -> ExprEvalResult
 				args.resize(program.arg_counts[i])
 				for k in range(args.size() - 1, -1, -1):
 					args[k] = stack.pop_back()
-				value = ExprFunctions.call_function(program.names[i], args)
 				var parts := PackedStringArray()
 				for arg in args:
 					parts.append(_fmt(arg))
 				description = "%s(%s)" % [program.names[i], ", ".join(parts)]
+				# 下限が上限より大きい clamp は、黙って下限を返さず、実行時エラーにする。
+				if program.names[i] == "clamp" and args[1] > args[2]:
+					return _fail(result, program.positions[i], "下限が上限より大きい：%s" % description)
+				value = ExprFunctions.call_function(program.names[i], args)
 			_:
 				var right: float = stack.pop_back()
 				var left: float = stack.pop_back()
