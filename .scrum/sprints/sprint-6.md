@@ -1,5 +1,5 @@
 # Sprint 6
-- phase: review
+- phase: retrospective
 - goal: スプリントの終わりに、PO は、ゲームが終わった後はモデルが一切変わらないことと、何千もの条件や巨大な式を持つモデルが上限で拒否されるか現実的な時間で回ることを確かめられる。アクションで範囲の外の値にしようとしても、ストックは範囲に収まる。
 - started: 2026-11-07T21:54:22+09:00
 - base_branch: main
@@ -7,9 +7,9 @@
 ## 対象 PBI
 | PBI | points | ui | 担当構成 | 状態 | 差し戻し | ブランチ | 作業ディレクトリ |
 |---|---|---|---|---|---|---|---|
-| #37 | 5 | no | game-developer → code-reviewer・security-auditor・data-scientist | approved | 0 | scrum/37 | /home/kal24hi/Projects/meguri-engine/.claude/worktrees/agent-aa9cf4f59d7aacd8b |
-| #39 | 2 | no | game-developer → code-reviewer・security-auditor・data-scientist | approved | 0 | scrum/39 | /home/kal24hi/Projects/meguri-engine/.claude/worktrees/agent-ad46157f468b26ff9 |
-| #45 | 3 | no | game-developer → code-reviewer・security-auditor | approved | 1 | scrum/45 | /home/kal24hi/Projects/meguri-engine/.claude/worktrees/agent-a56abb94a16498ac6 |
+| #37 | 5 | no | game-developer → code-reviewer・security-auditor・data-scientist | accepted | 0 | scrum/37 | /home/kal24hi/Projects/meguri-engine/.claude/worktrees/agent-aa9cf4f59d7aacd8b |
+| #39 | 2 | no | game-developer → code-reviewer・security-auditor・data-scientist | accepted | 0 | scrum/39 | /home/kal24hi/Projects/meguri-engine/.claude/worktrees/agent-ad46157f468b26ff9 |
+| #45 | 3 | no | game-developer → code-reviewer・security-auditor | accepted | 1 | scrum/45 | /home/kal24hi/Projects/meguri-engine/.claude/worktrees/agent-a56abb94a16498ac6 |
 
 ## デモ台本
 | # | PO の操作 | 期待する結果 | PBI |
@@ -151,3 +151,14 @@
 - デモ：/home/kal24hi/Projects/meguri-engine/.scrum/demos/sprint-6/（README.md、demo.sh、rehearsal.md）。回：1。
 - リハーサル：1度目の通しで4場面すべてが一致した。場面1の「同じモデルで変更の前後を並べる」は、#45 の上限で990個×761文字のモデルが作れなくなったため、変更前は報告の値、変更後は上限に収まる形で示した（注記つきで一致）。
 - phase を review にした。
+
+### スプリントレビュー
+- PO にデモの台本とリハーサルの結果、リスク（デッキのリスク7。最悪の1ターンが約5.9秒から約0.6秒に下がった。残りは #46・#47）、PO の判断が要る3点（#45 でアクションの式も上限の対象にしたこと、#37 で add_auxiliary も凍結に足したこと、上限の値10万命令）を示した。
+- PO はデモで見たもの全体を受け入れた。
+- PR #48 で main にマージした。マージ後の main でテストは 501 件、0 errors / 0 failures、WARNING・leaked は0件だった。
+- #37・#39・#45 は閉じた（done）。status のラベルを外した。worktree と PBI のブランチ、統合ブランチを削除した。
+
+## デモの判定
+| 回 | 日時 | 判定 | PO の指摘 | 原因の PBI | 対応 |
+|---|---|---|---|---|---|
+| 1 | 2026-11-08T11:44:48+09:00 | 受け入れ | — | — | マージした |

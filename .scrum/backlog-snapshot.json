@@ -1,14 +1,11 @@
-{"updated_at": "2026-11-07T22:47:39+09:00", "items": [
+{"updated_at": "2026-11-08T11:44:48+09:00", "items": [
   {"id": "#34", "title": "条件付きのイベントを定義し、シード付きの乱数で判定する", "status": "ready", "points": 5, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/34"},
-  {"id": "#37", "title": "ゲーム終了後の凍結と、終了条件の組み立ての使い回し", "status": "sprint", "points": 5, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/37"},
-  {"id": "#45", "title": "モデル全体の命令数に上限を置く", "status": "sprint", "points": 3, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/45"},
   {"id": "#46", "title": "定数が変わったときに、依存する式だけを組み立て直す", "status": "ready", "points": 5, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/46"},
   {"id": "#8", "title": "下限を割るときに流出の量を減らす", "status": "ready", "points": 5, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/8"},
   {"id": "#26", "title": "自動実行の結果から、暴走・停滞するストックを見つける", "status": "ready", "points": 3, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/26"},
   {"id": "#28", "title": "テキスト版の町を上限・下限で書き直し、パラメータの値を検査する", "status": "ready", "points": 3, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/28"},
   {"id": "#30", "title": "テキスト版の標準入力で、文字の途中で切らず、NUL と不正な文字を安全に扱う", "status": "ready", "points": 3, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/30"},
   {"id": "#36", "title": "自動実行の出力ファイルを、失敗しても壊れないように書く", "status": "ready", "points": 5, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/36"},
-  {"id": "#39", "title": "アクションの効果でも、ストックの上限・下限を守る", "status": "sprint", "points": 2, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/39"},
   {"id": "#42", "title": "アクションと勝敗の条件の式から、補助変数を使えるかを決めて知らせる", "status": "ready", "points": 3, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/42"},
   {"id": "#43", "title": "実行時エラーで、大きな値やオーバーフローでも原因の名前を見せる", "status": "ready", "points": 3, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/43"},
   {"id": "#47", "title": "呼び出しの回数に比例する時間を抑える（拒否の前の安価な検査、アクションの評価の回数）", "status": "new", "points": null, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/47"},
@@ -32,5 +29,8 @@
   {"id": "#23", "title": "実行時エラーで原因の値を名前で示す", "status": "done", "points": 2, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/23"},
   {"id": "#29", "title": "エラー文に出す式の長さに上限を置く", "status": "done", "points": 2, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/29"},
   {"id": "#35", "title": "勝利と敗北の条件を式で書き、満たしたらゲームを終える", "status": "done", "points": 3, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/35"},
-  {"id": "#7", "title": "ストックの上限・下限を設け、範囲内に値を止める", "status": "done", "points": 2, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/7"}
+  {"id": "#37", "title": "ゲーム終了後の凍結と、終了条件の組み立ての使い回し", "status": "done", "points": 5, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/37"},
+  {"id": "#45", "title": "モデル全体の命令数に上限を置く", "status": "done", "points": 3, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/45"},
+  {"id": "#7", "title": "ストックの上限・下限を設け、範囲内に値を止める", "status": "done", "points": 2, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/7"},
+  {"id": "#39", "title": "アクションの効果でも、ストックの上限・下限を守る", "status": "done", "points": 2, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/39"}
 ]}
