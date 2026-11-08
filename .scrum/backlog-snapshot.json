@@ -1,4 +1,4 @@
-{"updated_at": "2026-11-08T11:44:48+09:00", "items": [
+{"updated_at": "2026-11-08T11:48:55+09:00", "items": [
   {"id": "#34", "title": "条件付きのイベントを定義し、シード付きの乱数で判定する", "status": "ready", "points": 5, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/34"},
   {"id": "#46", "title": "定数が変わったときに、依存する式だけを組み立て直す", "status": "ready", "points": 5, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/46"},
   {"id": "#8", "title": "下限を割るときに流出の量を減らす", "status": "ready", "points": 5, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/8"},
