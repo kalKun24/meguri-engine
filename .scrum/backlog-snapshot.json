@@ -1,4 +1,4 @@
-{"updated_at": "2026-11-07T21:54:52+09:00", "items": [
+{"updated_at": "2026-11-07T22:47:39+09:00", "items": [
   {"id": "#34", "title": "条件付きのイベントを定義し、シード付きの乱数で判定する", "status": "ready", "points": 5, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/34"},
   {"id": "#37", "title": "ゲーム終了後の凍結と、終了条件の組み立ての使い回し", "status": "sprint", "points": 5, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/37"},
   {"id": "#45", "title": "モデル全体の命令数に上限を置く", "status": "sprint", "points": 3, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/45"},
@@ -11,6 +11,7 @@
   {"id": "#39", "title": "アクションの効果でも、ストックの上限・下限を守る", "status": "sprint", "points": 2, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/39"},
   {"id": "#42", "title": "アクションと勝敗の条件の式から、補助変数を使えるかを決めて知らせる", "status": "ready", "points": 3, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/42"},
   {"id": "#43", "title": "実行時エラーで、大きな値やオーバーフローでも原因の名前を見せる", "status": "ready", "points": 3, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/43"},
+  {"id": "#47", "title": "呼び出しの回数に比例する時間を抑える（拒否の前の安価な検査、アクションの評価の回数）", "status": "new", "points": null, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/47"},
   {"id": "#6", "title": "時間遅れを式で参照できるようにする", "status": "ready", "points": 3, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/6"},
   {"id": "#12", "title": "上限に達するときに流入の量を減らす", "status": "new", "points": null, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/12"},
   {"id": "#27", "title": "手元と CI で取り込むものの固定を強める", "status": "ready", "points": 2, "ui": "no", "url": "https://github.com/kalKun24/meguri-engine/issues/27"},
