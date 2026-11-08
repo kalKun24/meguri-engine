@@ -179,7 +179,7 @@ godot --headless --no-header --path . -s res://src/auto_run/auto_run_main.gd -- 
 |---|---|---|
 | `--model=パス` | 必須 | `build()`（引数なしで呼べるもの）を持ち、`SimModel` を返す GDScript のクラス。`res://` の下の `.gd` に限り、256 文字まで。NUL・制御文字・不可視文字・バックスラッシュ・`..` を含むパスは断る。`RefCounted` のクラスに限る。**指定した GDScript のコードを実行する**ので、信頼できるモデルだけを指定する |
 | `--turns=N` | 必須 | 回すターン数。1 以上 100000 以下の整数。（N+1）×ストックの数が 1,000,000 を超える指定は、実行の前にエラーにする |
-| `--seed=S` | 省略時は 0 | 整数（符号を除いて 18 桁まで）。モデルの `set_seed()` に渡す。シードを使う処理は #34 から入る |
+| `--seed=S` | 省略時は 0 | 整数（符号を除いて 18 桁まで）。モデルの `set_seed()` に渡す（戻り値は `Error`。終わったモデルには渡せず `ERR_LOCKED` になる）。シードを使う処理は #34 から入る |
 | `--out=ファイル` | 省略時は標準出力 | CSV を書くファイル |
 
 **出力先のファイル**
@@ -243,8 +243,12 @@ var result: GameResult = model.get_result()  # outcome は "victory"・"defeat"�
 - 同じターンに勝利と敗北が成り立ったら、`set_simultaneous_priority()` で決めた側を採る（既定は敗北）。同じ種類の中では、定義の順で最初に成り立ったものを採る。
 - `game_ended` は `turn_finished` の後に発火する。
 - 終わった後の `step()`・`advance_turn()`・`apply_action()` は `ERR_LOCKED` を返し、状態を変えない。`last_error` は「ゲームは終了している」である。
+- 終わった後は、モデルを変える関数もすべて `ERR_LOCKED` を返し、状態を変えない。対象は `add_stock`・`add_constant`・`add_flow`・`add_flow_expr`・`add_auxiliary`・`add_action`・`add_victory_condition`・`add_defeat_condition`・`set_simultaneous_priority`・`set_seed`・`validate` である。`game_ended` や `turn_finished` の受け手の中から呼んでも同じである。読むだけの関数（`get_*`・`has_*`・`is_ended` など）は終わった後も使える。
+- `set_seed()` は `Error` を返す。成功すると `OK` を返して `last_error` を空にし、終わった後は `ERR_LOCKED` を返して種を変えない。
 - 条件の式の評価に失敗したら（0 除算、NaN・無限大）、そのターン全体（ストック・定数・ターン番号・乱数の状態）を取り消し、`FAILED` を返す。ゲームは終わらない。判定では、成り立つ条件が先に見つかっても、すべての条件を評価する。
 - テキスト版（`TextPlayer`）は、ゲームが終わると結果を表示して終わる。
+- 条件の式は `validate()` で一度だけ組み立て、組み立てた命令列を条件ごとに持つ。ストック・定数・条件を足したとき、アクションが定数を変えたときだけ、次の `advance_turn()` で組み立て直す。組み立ての回数はターン数に比例しない。
+- `demo/freeze_demo.gd` は、ゲームが終わった後にモデルを変える関数を順に呼び、すべて `ERR_LOCKED` で状態が変わらないことを見せる（`godot --headless --path . -s res://demo/freeze_demo.gd`）。`demo/condition_perf_demo.gd` は、条件990個×761文字のモデルで1ターンの時間を測る（`godot --headless --path . -s res://demo/condition_perf_demo.gd -- --turns=3`）。
 
 ## CI
 

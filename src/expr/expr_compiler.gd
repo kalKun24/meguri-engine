@@ -59,6 +59,18 @@ static func compile(root: ExprNode, source: String, stocks: Dictionary, constant
 	return result
 
 
+## root を組み立てたときにできる命令の数を、組み立てずに数える。節1つにつき命令が1つ出るので、節の数に等しい。
+## 名前の解決に依らないため、定義した時点で数えられる。再帰を使わず、明示的なスタックで木をたどる。
+static func count_ops(root: ExprNode) -> int:
+	var count := 0
+	var stack: Array[ExprNode] = [root]
+	while not stack.is_empty():
+		var node: ExprNode = stack.pop_back()
+		count += 1
+		stack.append_array(node.children)
+	return count
+
+
 static func _resolve_name(program: ExprProgram, node: ExprNode, stocks: Dictionary, constants: Dictionary, auxiliaries: Dictionary, flow_names: Dictionary) -> String:
 	if ExprFunctions.is_allowed(node.name):
 		return "'%s' は関数である。関数は () を付けて呼ぶ（例：%s）" % [node.name, _call_example(node.name)]

@@ -35,7 +35,10 @@ func run(model: SimModel, turns: int, seed_value: int = 0) -> AutoRunResult:
 	var problem := check_request(turns, result.stock_names.size())
 	if not problem.is_empty():
 		return _reject(result, problem)
-	model.set_seed(seed_value)
+	var seed_code: Error = model.set_seed(seed_value)
+	if seed_code != OK:
+		# 渡されたモデルが既に終わっているときなど。種を決められないまま回さない。
+		return _stop(result, seed_code, "種を決められない（%s）：%s" % [error_string(seed_code), model.last_error])
 	var first := _read_row(model, result)
 	if first.error != OK:
 		return first
